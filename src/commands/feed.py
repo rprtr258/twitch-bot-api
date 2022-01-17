@@ -62,7 +62,6 @@ def feed(
         """, (now, username))
         db_config.conn.commit()
 
-# TODO: check sql injection in IN statement
 @commands.utils.with_mention
 @feed_command
 def feed_cmd(

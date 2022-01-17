@@ -7,9 +7,7 @@ import config
 import utils
 
 
-# TODO: styles
 def balabob(TO_SKIP: int, text: str) -> Tuple[bool, str]:
-    # TODO: match
     if os.name == "posix":
         output = subprocess.check_output(["./balaboba"] + text.split())
     elif os.name == "nt":
@@ -25,7 +23,6 @@ def balaboba(conf: config.Config, message_record: utils.MessageRecord):
     to_skip = conf.balaboba_config.balaboba_skip_constant
     did_generate, response = balabob(to_skip, message_record.message)
     if did_generate:
-        # TODO: autoincrement
         new_id = conf.db_config.conn.execute("""
             SELECT MAX(id) + 1 FROM balaboba;
         """).fetchone()[0]
@@ -68,7 +65,6 @@ def balaboba_continue(conf: config.Config, message_record: utils.MessageRecord):
     if old_text:
         old_text = old_text[0]
         to_skip = conf.balaboba_config.balaboba_skip_constant
-        # TODO: continue even if text is too long
         did_generate, response = balabob(to_skip, old_text)
         if did_generate and response != old_text:
             conf.db_config.conn.execute("""

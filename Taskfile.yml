@@ -12,7 +12,6 @@ tasks:
       - git submodule update --init --recursive
       - sqlite3 db.db < sql/init.sql
       - (cd src/balaboba; go build cmd/*.go && mv cmd.exe ../../balaboba.exe)
-      # TODO: download dataset and build model
 
   linter:
     desc: Run linter

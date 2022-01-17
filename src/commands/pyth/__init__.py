@@ -15,7 +15,6 @@ def pyth(conf: config.Config, message_record: utils.MessageRecord):
     with open(PYTH_CMD_FILE, "w", encoding="utf-8") as fd:
         fd.write(message_record.message)
     ps = subprocess.run(['echo', '6'], check=True, capture_output=True)
-    # TODO: stop on timeout (5-10 seconds)
     processNames = subprocess.run(["python3", "pyth/pyth.py", PYTH_CMD_FILE], input=ps.stdout, capture_output=True)
     subprocess.run(["rm", PYTH_CMD_FILE])
     out = processNames.stdout.decode('utf-8').replace('\r', '').replace('\n', ' ')

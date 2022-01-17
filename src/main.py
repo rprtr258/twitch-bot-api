@@ -42,8 +42,6 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
         message=None if param == [] else param[0],
         channel=message_record.channel,
     )
-    # TODO: match case
-    # TODO: list blab's pastas
     if command == "!блаб":
         text = commands.balaboba(conf, command_message_record)
         send_long_message(conf.twitch_config, message_record.channel, text)
@@ -60,7 +58,6 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
     elif command == "!feed":
         send_message(conf.twitch_config, message_record.channel, commands.feed_cmd(conf, command_message_record))
     elif command == "!commands":
-        # TODO: extract somehow?
         send_message(
             conf.twitch_config,
             message_record.channel,
@@ -75,7 +72,6 @@ send(conf.twitch_config.sock, f"PASS {conf.twitch_config.password}")
 send(conf.twitch_config.sock, f"NICK {conf.twitch_config.nick}")
 for channel in conf.twitch_config.channels:
     send(conf.twitch_config.sock, f"JOIN #{channel}")
-# TODO: task with writing messages from bot
 with conf.twitch_config.sock:
     is_running = True
     while is_running:
