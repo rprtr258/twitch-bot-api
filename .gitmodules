@@ -1,6 +1,9 @@
-[submodule "quotes_generator"]
-	path = quotes_generator
+[submodule "src/balaboba"]
+	path = src/balaboba
+	url = https://github.com/Toffee-iZt/balaboba
+[submodule "src/quotes_generator"]
+	path = src/quotes_generator
 	url = https://github.com/rprtr258/quotes-generator
-[submodule "pyth"]
-	path = pyth
+[submodule "src/pyth"]
+	path = src/pyth
 	url = https://github.com/isaacg1/pyth

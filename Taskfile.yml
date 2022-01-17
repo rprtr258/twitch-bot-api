@@ -1,7 +1,26 @@
 version: '3'
 
 tasks:
+  run:
+    desc: Launch bot
+    cmds:
+      - set -a && source .env && set +a && winpty python3 src/main.py
+
+  init:
+    desc: Checkout submodules, init database and build balaboba binary
+    cmds:
+      - git submodule update --init --recursive
+      - sqlite3 db.db < sql/init.sql
+      - (cd src/balaboba; go build cmd/*.go && mv cmd.exe ../../balaboba.exe)
+      # TODO: download dataset and build model
+
+  linter:
+    desc: Run linter
+    cmds:
+      - flake8 *.py commands/*.py --max-line-length 120 --ignore=E302,E305
+
   get_chat_logs:
+    desc: Collect data for training markov chain
     generates: [dataset]
     cmds:
       - tcd -q --channel screamlark --first 10
@@ -11,6 +30,7 @@ tasks:
       - rm logs
 
   train:
+    desc: Train markov chain on collected data
     deps: [get_chat_logs]
     sources: [dataset]
     generates: [model.json]
@@ -18,29 +38,36 @@ tasks:
       - python quotes_generator/main.py train --dataset dataset --model model.json
 
   commit:
-    - venv/Scripts/pip freeze > requirements.txt
-    - cmd: git add .
-      ignore_error: true
-    - git status
-    - cmd: git commit -m "Autocommit"
-      ignore_error: true
-
-  push_heroku:
-    - git push heroku master
-
-  push_github:
-    - git push github master
+    desc: Commit to git
+    cmds:
+      - venv/Scripts/pip freeze > requirements.txt
+      - task: linter
+      - cmd: git add .
+        ignore_error: true
+      - git status
+      - cmd: git commit -m "Autocommit"
+        ignore_error: true
 
   push:
-    deps:
-      - push_heroku
-      - push_github
+    desc: Commit and push to git and heroku
+    cmds:
+      - git push heroku master
+      - git push github master
 
   deploy-fix:
-    - task: commit
-    - task: push
+    desc: Commit, push and deploy
+    cmds:
+      - task: commit
+      - task: push
 
   deploy:
-    - task: train
-    - task: deploy-fix
+    desc: Prepare new data, commit, push and deploy
+    cmds:
+      - task: train
+      - task: deploy-fix
+  
+  dump-db:
+    desc: Dump balaboba table into blab.sql and feed table into feed.sql
+    cmds:
+      - sqlite3 db.db < sql/dump.sql
 

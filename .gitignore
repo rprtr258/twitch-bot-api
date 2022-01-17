@@ -2,3 +2,7 @@
 __pycache__/
 venv/
 *.txt
+.env
+db.db
+balaboba.exe
+c
