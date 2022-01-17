@@ -97,6 +97,7 @@ with conf.twitch_config.sock:
                 else:
                     logging.info(line)
         except socket.timeout as e:
+            logging.error("Socket timeout:", e)
             pass
         except socket.error as e:
             logging.error("Socket died:", e)
