@@ -71,8 +71,9 @@ def feed_cmd(
     username: str,
     words: List[str],
 ):
-    def _feed_info(emotes_to_show: List[Tuple[str, int]]):
-        return "ты покормил: " + "; ".join(
+    def _feed_info(emotes_to_show: List[Tuple[str, int]], username=None):
+        user = username if username else "ты"
+        return f"{user} покормил: " + "; ".join(
             f"{word} {count} раз, вес {calc_weight(count)} грамм"
             for word, count in emotes_to_show
         )
@@ -89,6 +90,9 @@ def feed_cmd(
     if username == "Gekmi":
         return "ты наказан за читерство с талончиками PauseFish"
 
+    if words == []:
+        return _list_all_emotes()
+
     if words == ["all"]:
         emotes_to_show = db_config.conn.execute("""
             SELECT emote.word, feed.count FROM feed JOIN emote ON feed.emote_id=emote.id
@@ -97,8 +101,15 @@ def feed_cmd(
         if emotes_to_show:
             return _feed_info(emotes_to_show)
         return _list_all_emotes()
-    elif words == []:
-        return _list_all_emotes()
+
+    if len(words) == 1:
+        maybe_username = words[0].lower()
+        emotes_to_show = db_config.conn.execute("""
+            SELECT emote.word, feed.count FROM feed JOIN emote ON feed.emote_id=emote.id
+            WHERE feed.username=? AND emote.channel=? AND feed.count > 0;
+        """, (maybe_username, channel)).fetchall()
+        if emotes_to_show:
+            return _feed_info(emotes_to_show, username=maybe_username)
 
     words_sql = ','.join(map(repr, words))
     emotes_to_show = db_config.conn.execute(f"""
