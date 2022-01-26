@@ -11,7 +11,7 @@ def balabob(TO_SKIP: int, text: str) -> Tuple[bool, str]:
     if os.name == "posix":
         output = subprocess.check_output(["./balaboba"] + text.split())
     elif os.name == "nt":
-        output = subprocess.check_output(["./balaboba.exe"] + text.split())
+        output = subprocess.check_output(["./balaboba.exe", "-s", "6"] + text.split())
     output = output.decode("utf-8").split()
     if "на острые темы, например, про политику или религию" in ' '.join(output):
         return False, "PauseFish"

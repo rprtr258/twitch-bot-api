@@ -1,10 +1,17 @@
 version: '3'
 
+dotenv: ['.env']
+
 tasks:
   run:
     desc: Launch bot
     cmds:
-      - set -a && source .env && set +a && winpty python3 src/main.py
+      - winpty python3 src/main.py
+
+  send:
+    desc: Send message from bot
+    cmds:
+      - python3 src/cmd.py {{.CLI_ARGS}}
 
   init:
     desc: Checkout submodules, init database and build balaboba binary
