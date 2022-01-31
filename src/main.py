@@ -80,7 +80,7 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
                 send_message(
                     conf.twitch_config,
                     message_record.channel,
-                    f"@{message_record.username} открыл яйцо и получил OOOO 👉 {egg_inner}"
+                    f"@{message_record.username} открыл яйцо и получил OOOO 👉 {egg_inner}" # TODO: remove unicode
                 )
             else:
                 minutes = 60 - now.minute
