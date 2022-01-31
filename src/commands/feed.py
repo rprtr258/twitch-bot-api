@@ -87,9 +87,6 @@ def feed_cmd(
             for emote, word in emotes_to_show
         )
 
-    if username == "Gekmi":
-        return "ты наказан за читерство с талончиками PauseFish"
-
     if words == []:
         return _list_all_emotes()
 

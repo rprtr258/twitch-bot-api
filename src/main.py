@@ -45,55 +45,63 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
         channel=message_record.channel,
     )
     if command == "!блаб":
-        text = commands.balaboba(conf, command_message_record)
-        send_long_message(conf.twitch_config, message_record.channel, text)
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       text = commands.balaboba(conf, command_message_record)
+#       send_long_message(conf.twitch_config, message_record.channel, text)
     elif command == "!блаб-прочитать":
-        text = commands.balaboba_read(conf, command_message_record)
-        send_long_message(conf.twitch_config, message_record.channel, text)
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       text = commands.balaboba_read(conf, command_message_record)
+#       send_long_message(conf.twitch_config, message_record.channel, text)
     elif command == "!блаб-продолжить":
-        text = commands.balaboba_continue(conf, command_message_record)
-        send_long_message(conf.twitch_config, message_record.channel, text)
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       text = commands.balaboba_continue(conf, command_message_record)
+#       send_long_message(conf.twitch_config, message_record.channel, text)
     elif command == "!say":
-        send_message(conf.twitch_config, message_record.channel, commands.say(conf, command_message_record))
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       send_message(conf.twitch_config, message_record.channel, commands.say(conf, command_message_record))
     elif command == "!pyth":
-        send_message(conf.twitch_config, message_record.channel, commands.pyth(conf, command_message_record))
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       send_message(conf.twitch_config, message_record.channel, commands.pyth(conf, command_message_record))
     elif command == "!feed":
-        send_message(conf.twitch_config, message_record.channel, commands.feed_cmd(conf, command_message_record))
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       send_message(conf.twitch_config, message_record.channel, commands.feed_cmd(conf, command_message_record))
     elif command == "!commands":
-        send_message(
-            conf.twitch_config,
-            message_record.channel,
-            f"@{username} Команды бота: " + ", ".join(
-                f"!{cmd}" for cmd in ["блаб", "блаб-прочитать", "блаб-продолжить", "say", "pyth", "feed", "commands"]
-            )
-        )
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       send_message(
+#           conf.twitch_config,
+#           message_record.channel,
+#           f"@{username} Команды бота: " + ", ".join(
+#               f"!{cmd}" for cmd in ["блаб", "блаб-прочитать", "блаб-продолжить", "say", "pyth", "feed", "commands"]
+#           )
+#       )
     elif command == "!киндер":
-        if param == []:
-            import subprocess
-            import datetime
-            now = datetime.datetime.now()
-            hour = now.hour
-            global last_hour_egg_was_open
-            if last_hour_egg_was_open != hour:
-                last_hour_egg_was_open = hour
-                egg_inner = subprocess.Popen("cat eggs.txt | shuf -n 1".split(), shell=True, stdout=subprocess.PIPE).communicate()[0].decode('utf-8').strip()
-                send_message(
-                    conf.twitch_config,
-                    message_record.channel,
-                    f"@{message_record.username} открыл яйцо и получил OOOO 👉 {egg_inner}"
-                )
-            else:
-                minutes = 60 - now.minute
-                send_message(
-                    conf.twitch_config,
-                    message_record.channel,
-                    f"@{message_record.username} подожди {minutes} минут"
-                )
-        elif message_record.username == "rprtr258":
-            prize = ' '.join(param).strip()
-            logging.info(f"ADDING '{prize}' prize")
-            with open("eggs.txt", "a", encoding="utf-8") as fd:
-                fd.write(prize + '\n')
+        send_message(conf.twitch_config, message_record.channel, "Бот бастует против металла coMMMMfy")
+#       if param == []:
+#           import subprocess
+#           import datetime
+#           now = datetime.datetime.now()
+#           hour = now.hour
+#           global last_hour_egg_was_open
+#           if last_hour_egg_was_open != hour:
+#               last_hour_egg_was_open = hour
+#               egg_inner = subprocess.Popen("cat eggs.txt | shuf -n 1".split(), shell=True, stdout=subprocess.PIPE).communicate()[0].decode('utf-8').strip()
+#               send_message(
+#                   conf.twitch_config,
+#                   message_record.channel,
+#                   f"@{message_record.username} открыл яйцо и получил OOOO 👉 {egg_inner}"
+#               )
+#           else:
+#               minutes = 60 - now.minute
+#               send_message(
+#                   conf.twitch_config,
+#                   message_record.channel,
+#                   f"@{message_record.username} подожди {minutes} минут"
+#               )
+#       elif message_record.username == "rprtr258":
+#           prize = ' '.join(param).strip()
+#           logging.info(f"ADDING '{prize}' prize")
+#           with open("eggs.txt", "a", encoding="utf-8") as fd:
+#               fd.write(prize + '\n')
 
 
 def main():
