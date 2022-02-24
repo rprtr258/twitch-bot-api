@@ -1,4 +1,4 @@
-## How to launch (supposing you have installed [task](taskfile.dev), git, sqlite3 and golang compiler)
+## How to launch (supposing you have installed [task](https://taskfile.dev), git, sqlite3 and golang compiler)
 
 ```bash
 git clone https://github.com/rprtr258/twitch-bot-api/
