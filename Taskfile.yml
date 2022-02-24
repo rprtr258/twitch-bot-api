@@ -11,7 +11,7 @@ tasks:
   send:
     desc: Send message from bot
     cmds:
-      - python3 src/cmd.py {{.CLI_ARGS}}
+      - python3 src/cmd.py '{{.CLI_ARGS}}'
 
   init:
     desc: Checkout submodules, init database and build balaboba binary
