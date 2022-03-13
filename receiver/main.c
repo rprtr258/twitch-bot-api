@@ -84,6 +84,7 @@ i32 main(i32 argc, char** argv) {
     }
     i32 socket_fd;
     {
+        // TODO: fix socket flapping
         socket_fd = socket(AF_INET, SOCK_STREAM, 0);
         if (socket_fd == -1) {
             return errno;
@@ -103,10 +104,6 @@ i32 main(i32 argc, char** argv) {
 
         exit_if_fail(send_part(socket_fd, "JOIN #rprtr258") == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
-
-        //exit_if_fail(send_part(socket_fd, "PRIVMSG #rprtr258 :"));
-        //exit_if_fail(send_part(socket_fd, "MMMM"));
-        //exit_if_fail(send_newline(socket_fd));
     }
     char buffer[BUFFER_CAPACITY];
     {
@@ -148,7 +145,9 @@ i32 main(i32 argc, char** argv) {
             write(STDOUT_FILENO, ",", 1);
             write(STDOUT_FILENO, hash_position + 1, second_colon_position - hash_position - 2);
             write(STDOUT_FILENO, ",", 1);
-            write(STDOUT_FILENO, second_colon_position + 1, bytes_read - (second_colon_position - buffer) - 1);
+            // TODO: check why 4
+            write(STDOUT_FILENO, second_colon_position + 1, bytes_read - (second_colon_position - buffer) - 4);
+            write(STDOUT_FILENO, NEWLINE, sizeof(NEWLINE));
         }
     }
     //usize start = 0, len = 0, capacity = 1024;

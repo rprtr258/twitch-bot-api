@@ -2,9 +2,7 @@ from dataclasses import dataclass
 import datetime
 import json
 import logging
-import os
 import sqlite3
-import socket
 from typing import List
 
 from quotes_generator.ngram import NGram
@@ -64,25 +62,10 @@ def load_feed_config() -> FeedConfig:
 @dataclass
 class TwitchConfig:
     channels: List[str]
-    sock: socket.socket
-    buffer: str
-    nick: str
-    password: str
 
 def load_twitch_config() -> TwitchConfig:
-    HOST = "irc.twitch.tv"
-    PORT = 6667
-    sock = socket.socket()
-    sock.connect((HOST, PORT))
-    sock.settimeout(1)
-    NICK = os.environ["NICK"]
-    PASSWORD = os.environ["PASSWORD"]
     return TwitchConfig(
-        channels=["rprtr258", "screamlark"],
-        sock=sock,
-        buffer="",
-        nick=NICK,
-        password=PASSWORD,
+        channels=["rprtr258"],
     )
 
 @dataclass

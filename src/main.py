@@ -1,8 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-import logging
-import re
-import socket
 import traceback
 
 import commands
@@ -10,16 +7,9 @@ import config
 import utils
 
 
-def send(sock: socket.socket, message: str):
-    sock.send((message + "\r\n").encode("utf-8"))
-
 def send_message(twitch_config: config.TwitchConfig, channel: str, message: str):
-    send(twitch_config.sock, f"PRIVMSG #{channel} :{message}")
-    logging.info(utils.MessageRecord(
-        username=twitch_config.nick,
-        channel=channel,
-        message=message,
-    ))
+    print(message)
+    #print(f"PRIVMSG #{channel} :{message}")
 
 def send_long_message(twitch_config: config.TwitchConfig, channel: str, message: str):
     message_len = len(message)
@@ -29,7 +19,6 @@ def send_long_message(twitch_config: config.TwitchConfig, channel: str, message:
         i += 500
 
 def every_message_action(conf: config.Config, message_record: utils.MessageRecord):
-    logging.info(message_record)
     commands.feed(conf, message_record)
 
 last_hour_egg_was_open = -1
@@ -45,6 +34,7 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
         channel=message_record.channel,
     )
     if command == "!блаб":
+        # TODO: fix balaboba
         text = commands.balaboba(conf, command_message_record)
         send_long_message(conf.twitch_config, message_record.channel, text)
     elif command == "!блаб-прочитать":
@@ -63,20 +53,22 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
         send_message(
             conf.twitch_config,
             message_record.channel,
-            f"@{username} Команды бота: " + ", ".join(
+            f"@{message_record.username} Команды бота: " + ", ".join(
                 f"!{cmd}" for cmd in ["блаб", "блаб-прочитать", "блаб-продолжить", "say", "pyth", "feed", "commands"]
             )
         )
     elif command == "!киндер":
         if param == []:
-            import subprocess
             import datetime
             now = datetime.datetime.now()
             hour = now.hour
             global last_hour_egg_was_open
             if last_hour_egg_was_open != hour:
                 last_hour_egg_was_open = hour
-                egg_inner = subprocess.Popen("cat eggs.txt | shuf -n 1".split(), shell=True, stdout=subprocess.PIPE).communicate()[0].decode('utf-8').strip()
+                with open("eggs.txt", "r", encoding="utf-8") as fd:
+                    eggs = [x.strip() for x in fd.readlines()]
+                import random
+                egg_inner = random.choice(eggs)
                 send_message(
                     conf.twitch_config,
                     message_record.channel,
@@ -91,50 +83,24 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
                 )
         elif message_record.username == "rprtr258":
             prize = ' '.join(param).strip()
-            logging.info(f"ADDING '{prize}' prize")
             with open("eggs.txt", "a", encoding="utf-8") as fd:
                 fd.write(prize + '\n')
 
 
 def main():
     conf = config.load_config_and_init()
-    send(conf.twitch_config.sock, f"PASS {conf.twitch_config.password}")
-    send(conf.twitch_config.sock, f"NICK {conf.twitch_config.nick}")
-    for channel in conf.twitch_config.channels:
-        send(conf.twitch_config.sock, f"JOIN #{channel}")
-    with conf.twitch_config.sock:
-        is_running = True
-        while is_running:
-            try:
-                conf.twitch_config.buffer += conf.twitch_config.sock.recv(2048).decode("utf-8")
-                data_split = conf.twitch_config.buffer.split("\r\n")
-                conf.twitch_config.buffer = data_split.pop()
-
-                for line in data_split:
-                    if "PING" in line:
-                        send(conf.twitch_config.sock, line.replace("PING", "PONG"))
-                    elif "PRIVMSG" in line:
-                        match = re.match(r":([a-z0-9_]+)!\1@\1.tmi.twitch.tv PRIVMSG #([a-z0-9_]+) :(.*)", line)
-                        username, channel, message = match.groups()
-                        action_on_message(
-                            conf=conf,
-                            message_record=utils.MessageRecord(
-                                username=username,
-                                channel=channel,
-                                message=message,
-                            )
-                        )
-                    else:
-                        logging.info(line)
-            except socket.timeout as e:
-                # ignore as valid waiting
-                pass
-            except socket.error as e:
-                logging.error("Socket died: {}", e)
-                is_running = False
-            except Exception:
-                logging.error(traceback.format_exc())
-                is_running = False
+    while True:
+        line = input()
+        #print(line) # TODO: log to stderr
+        username, channel, message = line.split(',', 2)
+        action_on_message(
+            conf=conf,
+            message_record=utils.MessageRecord(
+                username=username,
+                channel=channel,
+                message=message,
+            )
+        )
 
 if __name__ == "__main__":
     main()

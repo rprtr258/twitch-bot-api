@@ -30,7 +30,7 @@ tasks:
     cmds:
       - git submodule update --init --recursive
       - sqlite3 db.db < sql/init.sql
-      - (cd src/balaboba; go build cmd/*.go && mv cmd.exe ../../balaboba.exe)
+      - (cd src/balaboba; go build -o ../../balaboba cmd/cmd.go)
 
   linter:
     desc: Run linter
