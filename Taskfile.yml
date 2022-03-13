@@ -3,6 +3,18 @@ version: '3'
 dotenv: ['.env']
 
 tasks:
+  run_receiver:
+    desc: Run IRC receiver
+    cmds:
+      - gcc -Wall receiver/main.c -o run_receiver
+      - ./run_receiver $(cat ../oauth.txt)
+
+  run_sender:
+    desc: Run IRC sender
+    cmds:
+      - gcc -Wall sender/main.c -o run_sender
+      - ./run_sender $(cat ../oauth.txt)
+
   run:
     desc: Launch bot
     cmds:
