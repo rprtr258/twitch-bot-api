@@ -5,7 +5,7 @@ ssize_t write(int fd, const void* buf, size_t count);
 #include <stdio.h>
 int printf(const char *format, ...);
 
-#include "../lib.c"
+#include "lib.c"
 
 const_str find_char(const_str start, char c) {
     const_str res = start;

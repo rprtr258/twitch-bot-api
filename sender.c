@@ -15,7 +15,7 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struc
 //void FD_SET(int fd, fd_set *set);
 //void FD_ZERO(fd_set *set);
 
-#include "../lib.c"
+#include "lib.c"
 
 i32 main(i32 argc, char** argv) {
     if (argc != 2) {
