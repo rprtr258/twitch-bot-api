@@ -13,7 +13,7 @@ in_addr_t inet_addr(const char* cp);
 //int errno;
 
 #include <stdio.h>
-int putchar(int c);
+int printf(const char *format, ...);
 
 #include <stdlib.h>
 void exit(int status);
@@ -56,7 +56,7 @@ static bool are_strings_equal(const_str str1, const_str str2) {
         ++str1;
         ++str2;
     }
-    return BOOL(*str1 || *str2);
+    return !BOOL(*str1 || *str2);
 }
 
 static i32 send_part(i32 socket_fd, const_str message_part) {
@@ -137,7 +137,10 @@ i32 main(i32 argc, char** argv) {
             isize bytes_read = read(STDIN_FILENO, buffer, BUFFER_CAPACITY);
             if (bytes_read == -1) {
                 return errno;
+            } else if (bytes_read == 0) {
+                return 0;
             }
+            write(STDOUT_FILENO, buffer, bytes_read);
             exit_if_fail(send_part(socket_fd, "PRIVMSG #rprtr258 :"));
             // TODO: do we need to send newline one more time?
             exit_if_fail(write(socket_fd, buffer, bytes_read));
@@ -145,9 +148,7 @@ i32 main(i32 argc, char** argv) {
         }
         if (FD_ISSET(socket_fd, &read_fds)) {
             exit_if_fail(read(socket_fd, buffer, BUFFER_CAPACITY));
-            if (are_strings_equal(buffer, "PING :tmi.twitch.tv\n")) {
-                // TODO: check if works
-                puts("PING");
+            if (are_strings_equal(buffer, "PING :tmi.twitch.tv\r\n")) {
                 exit_if_fail(send_part(socket_fd, "PONG :tmi.twitch.tv"));
                 exit_if_fail(send_newline(socket_fd));
             }

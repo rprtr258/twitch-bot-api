@@ -3,10 +3,17 @@ version: '3'
 dotenv: ['.env']
 
 tasks:
-  run_receiver:
-    desc: Run IRC receiver
+  build_receiver:
+    desc: Build IRC receiver
+    sources: [receiver/main.c]
+    generates: [run_receiver]
     cmds:
       - gcc -Wall receiver/main.c -o run_receiver
+
+  run_receiver:
+    desc: Run IRC receiver
+    deps: [build_receiver]
+    cmds:
       - ./run_receiver $(cat ../oauth.txt)
 
   run_sender:

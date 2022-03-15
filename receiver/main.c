@@ -12,9 +12,6 @@ in_addr_t inet_addr(const char* cp);
 #include <errno.h>
 //int errno;
 
-#include <stdio.h>
-int putchar(int c);
-
 #include <stdlib.h>
 void exit(int status);
 
@@ -22,6 +19,8 @@ void exit(int status);
 struct addrinfo;
 int getaddrinfo(const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res);
 
+#include <stdio.h>
+int printf(const char *format, ...);
 
 typedef ssize_t isize;
 typedef size_t usize;
@@ -46,7 +45,7 @@ static bool are_strings_equal(const_str str1, const_str str2) {
         ++str1;
         ++str2;
     }
-    return BOOL(*str1 || *str2);
+    return !BOOL(*str1 || *str2);
 }
 
 static i32 send_part(i32 socket_fd, const_str message_part) {
@@ -108,20 +107,18 @@ i32 main(i32 argc, char** argv) {
     char buffer[BUFFER_CAPACITY];
     {
         // skip welcome message
-        if (read(socket_fd, buffer, BUFFER_CAPACITY) == -1) {
-            return errno;
-        }
+        exit_if_fail(read(socket_fd, buffer, BUFFER_CAPACITY));
         // skip join channel response
-        if (read(socket_fd, buffer, BUFFER_CAPACITY) == -1) {
-            return errno;
-        }
+        exit_if_fail(read(socket_fd, buffer, BUFFER_CAPACITY));
     }
     for (;;) {
         isize bytes_read = read(socket_fd, buffer, BUFFER_CAPACITY);
         if (bytes_read == -1) {
+            str_literal err_msg = "READ ERROR\n";
+            write(STDERR_FILENO, err_msg, sizeof(err_msg));
             return errno;
         }
-        if (are_strings_equal(buffer, "PING :tmi.twitch.tv\n")) {
+        if (are_strings_equal(buffer, "PING :tmi.twitch.tv\r\n")) {
             exit_if_fail(send_part(socket_fd, "PONG :tmi.twitch.tv"));
             exit_if_fail(send_newline(socket_fd));
         } else {
@@ -145,34 +142,11 @@ i32 main(i32 argc, char** argv) {
             write(STDOUT_FILENO, ",", 1);
             write(STDOUT_FILENO, hash_position + 1, second_colon_position - hash_position - 2);
             write(STDOUT_FILENO, ",", 1);
-            // TODO: check why 4
+            // 4 is ':' in the beginning plus "\r\n\0" in the end
             write(STDOUT_FILENO, second_colon_position + 1, bytes_read - (second_colon_position - buffer) - 4);
-            write(STDOUT_FILENO, NEWLINE, sizeof(NEWLINE));
+            write(STDOUT_FILENO, NEWLINE, sizeof(NEWLINE) - 1);
         }
     }
-    //usize start = 0, len = 0, capacity = 1024;
-    //char buf[capacity];
-    //for (;;) {
-    //    usize to_read = ((start + len < capacity) ?
-    //        (capacity - (start + len)) :
-    //        (start - (start + len) % capacity));
-    //    isize bytes_read = read(socket_fd, buf + start, to_read);
-    //    if (bytes_read == -1) {
-    //        return errno;
-    //    }
-    //    len += bytes_read;
-    //    for (usize i = start; i < capacity && i - start < len; ++i) {
-    //        putchar(buf[i]);
-    //    }
-    //    if (start + len >= capacity) {
-    //        usize limit = (start + len) % capacity;
-    //        for (usize i = 0; i < limit; ++i) {
-    //            putchar(buf[i]);
-    //        }
-    //    }
-    //    start = (start + bytes_read) % capacity;
-    //    len -= bytes_read;
-    //}
-    //return 0;
+    return 0;
 }
 
