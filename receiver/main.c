@@ -7,6 +7,14 @@ int printf(const char *format, ...);
 
 #include "../lib.c"
 
+const_str find_char(const_str start, char c) {
+    const_str res = start;
+    while (*res != c) {
+        ++res;
+    }
+    return res;
+}
+
 i32 main(i32 argc, char** argv) {
     if (argc != 2) {
         printf("Usage: %s <OAUTH_TOKEN>\n", argv[0]);
@@ -23,18 +31,9 @@ i32 main(i32 argc, char** argv) {
             // :rprtr258!rprtr258@rprtr258.tmi.twitch.tv PRIVMSG #rprtr258 :MMMM
             //          ^                                        ^         ^
             //          bang                                     hash      second_colon
-            const_str bang_position = buffer.data + 1;
-            while (*bang_position != '!') {
-                ++bang_position;
-            }
-            const_str hash_position = bang_position;
-            while (*hash_position != '#') {
-                ++hash_position;
-            }
-            const_str second_colon_position = hash_position;
-            while (*second_colon_position != ':') {
-                ++second_colon_position;
-            }
+            const_str bang_position = find_char(buffer.data + 1, '!');
+            const_str hash_position = find_char(bang_position, '#');
+            const_str second_colon_position = find_char(hash_position, ':');
             // print "{user},{channel},{data}"
             write(STDOUT_FILENO, buffer.data + 1, bang_position - buffer.data - 1);
             write(STDOUT_FILENO, ",", 1);
