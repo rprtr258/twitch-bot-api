@@ -7,7 +7,7 @@ db.db
 balaboba.exe
 balaboba
 model.json
-run_receiver
-run_sender
+filter.py
+receiver
+sender
 c
-
