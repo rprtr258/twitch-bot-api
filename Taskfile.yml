@@ -5,10 +5,19 @@ dotenv: ['.env']
 tasks:
   build_receiver:
     desc: Build IRC receiver
-    sources: [receiver.c]
+    sources: [receiver.c lib.c]
     generates: [receiver]
     cmds:
       - gcc -Wall receiver.c -o receiver
+      - strip receiver
+
+  build_sender:
+    desc: Build IRC sender
+    sources: [sender.c lib.c]
+    generates: [sender]
+    cmds:
+      - gcc -Wall sender.c -o sender
+      - strip sender
 
   run_receiver:
     desc: Run IRC receiver

@@ -24,6 +24,7 @@ i32 main(i32 argc, char** argv) {
     struct Buffer buffer;
     skip_welcome_message(socket_fd);
     for (;;) {
+        // TODO: change to reading multiple lines
         read_buffer(socket_fd, &buffer);
         if (is_ping_message(&buffer)) {
             send_ping_response(socket_fd);
