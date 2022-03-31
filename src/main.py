@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import traceback
-
 import commands
 import config
 import utils
@@ -9,7 +7,7 @@ import utils
 
 def send_message(twitch_config: config.TwitchConfig, channel: str, message: str):
     print(message)
-    #print(f"PRIVMSG #{channel} :{message}")
+    # print(f"PRIVMSG #{channel} :{message}")
 
 def send_long_message(twitch_config: config.TwitchConfig, channel: str, message: str):
     message_len = len(message)
@@ -72,7 +70,7 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
                 send_message(
                     conf.twitch_config,
                     message_record.channel,
-                    f"@{message_record.username} открыл яйцо и получил OOOO 👉 {egg_inner}" # TODO: remove unicode
+                    f"@{message_record.username} открыл яйцо и получил OOOO 👉 {egg_inner}"  # TODO: remove unicode
                 )
             else:
                 minutes = 60 - now.minute
@@ -91,7 +89,7 @@ def main():
     conf = config.load_config_and_init()
     while True:
         line = input()
-        #print(line) # TODO: log to stderr
+        # print(line) # TODO: log to stderr
         username, channel, message = line.split(',', 2)
         action_on_message(
             conf=conf,
