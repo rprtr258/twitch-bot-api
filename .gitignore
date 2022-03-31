@@ -13,6 +13,7 @@ model.json
 # binaries
 balaboba.exe
 balaboba
-balancer
+balancer/target
+run_balancer
 receiver
 sender
