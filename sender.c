@@ -1,3 +1,6 @@
+#include <stdlib.h>
+char* getenv(const char *name);
+
 #include <unistd.h>
 ssize_t read(int fd, void* buf, size_t count);
 ssize_t write(int fd, const void* buf, size_t count);
@@ -18,14 +21,20 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struc
 #include "lib.c"
 
 i32 main(i32 argc, char** argv) {
-    if (argc != 3) {
-        printf("Usage: %s OAUTH_TOKEN CHANNEL\n", argv[0]);
+    if (argc != 2) {
+        printf("Usage: %s CHANNEL\n", argv[0]);
         return 1;
     }
-    i32 socket_fd = create_socket(argv[1], argv[2]);
+    const_str oauth_token = getenv("TWITCH_OAUTH_TOKEN");
+    if (oauth_token == NULL) {
+        printf("environment variable TWITCH_OAUTH_TOKEN was not provided\n");
+        return 1;
+    }
+    const_str channel = argv[1];
+    i32 socket_fd = create_socket(oauth_token, channel);
+    skip_welcome_message(socket_fd);
     struct Buffer socket_buffer = create_buffer();
     struct Buffer stdin_buffer = create_buffer();
-    skip_welcome_message(socket_fd);
     i32 flags = fcntl(socket_fd, F_GETFL);
     fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
     i32 max_fd_plus_one = (socket_fd > STDIN_FILENO ? socket_fd : STDIN_FILENO) + 1;
@@ -40,7 +49,7 @@ i32 main(i32 argc, char** argv) {
             // send every line in buffer
             while ((line_end_position = buffer_find_char(&stdin_buffer, 0, '\n')) != -1) {
                 exit_if_fail(send_part(socket_fd, "PRIVMSG #"));
-                exit_if_fail(send_part(socket_fd, argv[2]));
+                exit_if_fail(send_part(socket_fd, channel));
                 exit_if_fail(send_part(socket_fd, " :"));
                 write_buffer(socket_fd, &stdin_buffer, 0, line_end_position + 1);
                 buffer_pop(&stdin_buffer, line_end_position + 1);

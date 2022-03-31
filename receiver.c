@@ -1,3 +1,6 @@
+#include <stdlib.h>
+char* getenv(const char *name);
+
 #include <unistd.h>
 ssize_t read(int fd, void* buf, size_t count);
 ssize_t write(int fd, const void* buf, size_t count);
@@ -5,13 +8,19 @@ ssize_t write(int fd, const void* buf, size_t count);
 #include "lib.c"
 
 i32 main(i32 argc, char** argv) {
-    if (argc != 3) {
-        printf("Usage: %s OAUTH_TOKEN CHANNEL\n", argv[0]);
+    if (argc != 2) {
+        printf("Usage: %s CHANNEL\n", argv[0]);
         return 1;
     }
-    i32 socket_fd = create_socket(argv[1], argv[2]);
-    struct Buffer buffer = create_buffer();
+    const_str oauth_token = getenv("TWITCH_OAUTH_TOKEN");
+    if (oauth_token == NULL) {
+        printf("environment variable TWITCH_OAUTH_TOKEN was not provided\n");
+        return 1;
+    }
+    const_str channel = argv[1];
+    i32 socket_fd = create_socket(oauth_token, channel);
     skip_welcome_message(socket_fd);
+    struct Buffer buffer = create_buffer();
     for (;;) {
         read_buffer(socket_fd, &buffer);
         //read_buffer(STDIN_FILENO, &buffer);
@@ -62,7 +71,7 @@ i32 main(i32 argc, char** argv) {
                 write(STDOUT_FILENO, ",", 1);
                 // 3 is ':' in the beginning plus "\r\n" in the end
                 write_buffer(STDOUT_FILENO, &buffer, second_colon_position + 1, last_position - second_colon_position - 3);
-                write(STDOUT_FILENO, NEWLINE, sizeof(NEWLINE) - 1);
+                send_newline(STDOUT_FILENO);
                 // remove line read from buffer
                 usize bytes_processed = last_position + 1;
                 buffer_pop(&buffer, bytes_processed);
