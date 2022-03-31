@@ -43,6 +43,7 @@ i32 main(i32 argc, char** argv) {
                 write_buffer(socket_fd, &stdin_buffer, 0, line_end_position + 1);
                 buffer_pop(&stdin_buffer, line_end_position + 1);
             }
+            // TODO: fix echo 'smth' | ./sender
             if (feof(stdin)) {
                 return 0;
             }
