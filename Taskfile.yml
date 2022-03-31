@@ -6,12 +6,14 @@ tasks:
   build_receiver:
     desc: Build IRC receiver
     cmds:
+      - rm receiver
       - gcc -Wall -Wconversion receiver.c -o receiver
       - strip receiver
 
   build_sender:
     desc: Build IRC sender
     cmds:
+      - rm sender
       - gcc -Wall -Wconversion sender.c -o sender
       - strip sender
 
