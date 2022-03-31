@@ -50,10 +50,6 @@ fn main() -> Result<()> {
     for line_or_err in BufReader::new(stdin()).lines() {
         println!("{:?}", line_or_err);
         let line = line_or_err?;
-        println!("line={:?} -> {:?}", line, patterns_set
-            .matches(&line)
-            .into_iter()
-            .collect::<Vec<usize>>());
         let routes = patterns_set
             .matches(&line)
             .into_iter()
