@@ -19,6 +19,9 @@ int getaddrinfo(const char *node, const char *service, const struct addrinfo *hi
 #include <stdlib.h>
 void exit(int status);
 
+#include <assert.h>
+//void assert(scalar);
+
 typedef ssize_t isize;
 typedef size_t usize;
 typedef int i32;
@@ -38,16 +41,59 @@ static void exit_if_fail(i32 err) {
     }
 }
 
+// ========== BUFFER OPS ==========
 #define BUFFER_CAPACITY 1024
 struct Buffer {
     char data[BUFFER_CAPACITY];
-    isize size;
+    usize size;
+    usize start;
 };
 
+static struct Buffer create_buffer(void) {
+    struct Buffer buffer;
+    buffer.size = 0;
+    buffer.start = 0;
+    return buffer;
+}
 
-static void read_buffer(i32 fd, struct Buffer* buffer) {
-    buffer->size = read(fd, buffer->data, BUFFER_CAPACITY);
-    exit_if_fail(buffer->size);
+static void buffer_pop(struct Buffer* buffer, usize how_many) {
+    assert(how_many <= buffer->size);
+    buffer->start = (buffer->start + how_many) % BUFFER_CAPACITY;
+    buffer->size -= how_many;
+}
+
+static char buffer_get(struct Buffer* buffer, usize pos) {
+    assert(pos < buffer->size);
+    return buffer->data[(buffer->start + pos) % BUFFER_CAPACITY];
+}
+// ========== BUFFER OPS ==========
+
+static void read_buffer(usize fd, struct Buffer* buffer) {
+    assert(buffer->size < BUFFER_CAPACITY);
+    usize buffer_end = buffer->start + buffer->size;
+    isize read_size;
+    if (buffer_end < BUFFER_CAPACITY) {
+        usize free_tail_space = BUFFER_CAPACITY - buffer_end;
+        read_size = read(fd, buffer->data + buffer_end, free_tail_space);
+    } else {
+        usize effective_buffer_end = buffer_end % BUFFER_CAPACITY;
+        usize free_space = buffer->start - effective_buffer_end;
+        read_size = read(fd, buffer->data + effective_buffer_end, free_space);
+    }
+    exit_if_fail(read_size);
+    buffer->size += read_size;
+}
+
+static void write_buffer(usize fd, struct Buffer* buffer, usize from, usize len) {
+    usize effective_start = (buffer->start + from) % BUFFER_CAPACITY;
+    if (effective_start + len <= BUFFER_CAPACITY) {
+        write(fd, buffer->data + effective_start, len);
+    } else {
+        usize tail_size = BUFFER_CAPACITY - effective_start;
+        usize head_size = len - tail_size;
+        write(fd, buffer->data + effective_start, tail_size);
+        write(fd, buffer->data, head_size);
+    }
 }
 
 static bool is_ping_message(const struct Buffer* buffer) {
@@ -105,7 +151,7 @@ static i32 create_socket(const_str oauth_token) {
         exit_if_fail(send_part(socket_fd, "NICK rprtr258") == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
 
-        exit_if_fail(send_part(socket_fd, "JOIN #rprtr258") == -1);
+        exit_if_fail(send_part(socket_fd, "JOIN #xqcow") == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
     }
     return socket_fd;

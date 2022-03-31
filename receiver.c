@@ -7,12 +7,12 @@ int printf(const char *format, ...);
 
 #include "lib.c"
 
-const_str find_char(const_str start, char c) {
-    const_str res = start;
-    while (*res != c) {
-        ++res;
+usize find_char_in_buffer(struct Buffer *buffer, usize start, char c) {
+    usize pos = start;
+    while (buffer_get(buffer, pos) != c) {
+        ++pos;
     }
-    return res;
+    return pos;
 }
 
 i32 main(i32 argc, char** argv) {
@@ -21,28 +21,34 @@ i32 main(i32 argc, char** argv) {
         return 1;
     }
     i32 socket_fd = create_socket(argv[1]);
-    struct Buffer buffer;
+    struct Buffer buffer = create_buffer();
     skip_welcome_message(socket_fd);
     for (;;) {
         // TODO: change to reading multiple lines
         read_buffer(socket_fd, &buffer);
         if (is_ping_message(&buffer)) {
             send_ping_response(socket_fd);
+            // TODO: remove ping line read from buffer
         } else {
-            // :rprtr258!rprtr258@rprtr258.tmi.twitch.tv PRIVMSG #rprtr258 :MMMM
-            //          ^                                        ^         ^
-            //          bang                                     hash      second_colon
-            const_str bang_position = find_char(buffer.data + 1, '!');
-            const_str hash_position = find_char(bang_position, '#');
-            const_str second_colon_position = find_char(hash_position, ':');
+            // TODO: loop until there are messages to process
+            // :rprtr258!rprtr258@rprtr258.tmi.twitch.tv PRIVMSG #rprtr258 :MMMM\r\n\0
+            //          ^                                        ^         ^         ^
+            //          bang                                     hash  second_colon  last
+            usize bang_position         = find_char_in_buffer(&buffer,                     1,  '!');
+            usize hash_position         = find_char_in_buffer(&buffer,         bang_position,  '#');
+            usize second_colon_position = find_char_in_buffer(&buffer,         hash_position,  ':');
+            usize last_position         = find_char_in_buffer(&buffer, second_colon_position, '\0');
             // print "{user},{channel},{data}"
-            write(STDOUT_FILENO, buffer.data + 1, bang_position - buffer.data - 1);
+            write_buffer(STDOUT_FILENO, &buffer, 1, bang_position - 1);
             write(STDOUT_FILENO, ",", 1);
-            write(STDOUT_FILENO, hash_position + 1, second_colon_position - hash_position - 2);
+            write_buffer(STDOUT_FILENO, &buffer, hash_position + 1, second_colon_position - hash_position - 2);
             write(STDOUT_FILENO, ",", 1);
-            // 4 is ':' in the beginning plus "\r\n\0" in the end
-            write(STDOUT_FILENO, second_colon_position + 1, buffer.size - (second_colon_position - buffer.data) - 4);
+            // 3 is ':' in the beginning plus "\r\n" in the end
+            write_buffer(STDOUT_FILENO, &buffer, second_colon_position + 1, last_position - second_colon_position - 3);
             write(STDOUT_FILENO, NEWLINE, sizeof(NEWLINE) - 1);
+            // remove line read from buffer
+            usize bytes_processed = last_position + 1;
+            buffer_pop(&buffer, bytes_processed);
         }
     }
     return 0;
