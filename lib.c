@@ -184,6 +184,7 @@ static i32 create_socket(const_str oauth_token) {
         exit_if_fail(send_part(socket_fd, oauth_token) == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
 
+        // TODO: why we use rprtr258 nick here??????????????
         exit_if_fail(send_part(socket_fd, "NICK rprtr258") == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
 

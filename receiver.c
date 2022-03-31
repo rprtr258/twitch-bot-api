@@ -14,7 +14,6 @@ i32 main(i32 argc, char** argv) {
     skip_welcome_message(socket_fd);
     for (;;) {
         read_buffer(socket_fd, &buffer);
-        buffer_dump_stdout(&buffer);
         //read_buffer(STDIN_FILENO, &buffer);
         // processing all messages we read
         for (;;) {

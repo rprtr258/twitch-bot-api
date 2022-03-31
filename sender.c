@@ -43,7 +43,7 @@ i32 main(i32 argc, char** argv) {
                 write_buffer(socket_fd, &stdin_buffer, 0, line_end_position + 1);
                 buffer_pop(&stdin_buffer, line_end_position + 1);
             }
-            if (stdin_buffer.size == 0) {
+            if (feof(stdin)) {
                 return 0;
             }
         }
@@ -55,9 +55,10 @@ i32 main(i32 argc, char** argv) {
                 if (is_ping_message(&socket_buffer)) {
                     send_ping_response(socket_fd);
                 }
-                buffer_pop(&stdin_buffer, zero_position + 1);
+                buffer_pop(&socket_buffer, zero_position + 1);
             }
         }
     }
+    return 0;
 }
 
