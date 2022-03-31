@@ -5,31 +5,27 @@ dotenv: ['.env']
 tasks:
   build_receiver:
     desc: Build IRC receiver
-    sources: [receiver.c lib.c]
-    generates: [receiver]
     cmds:
-      - gcc -Wall receiver.c -o receiver
+      - gcc -Wall -Wconversion receiver.c -o receiver
       - strip receiver
 
   build_sender:
     desc: Build IRC sender
-    sources: [sender.c lib.c]
-    generates: [sender]
     cmds:
-      - gcc -Wall sender.c -o sender
+      - gcc -Wall -Wconversion sender.c -o sender
       - strip sender
 
   run_receiver:
     desc: Run IRC receiver
-    deps: [build_receiver]
     cmds:
-      - ./receiver $(cat ../oauth.txt)
+      - task: build_receiver
+      - ./receiver $(cat ./oauth.txt)
 
   run_sender:
     desc: Run IRC sender
     cmds:
-      - gcc -Wall sender.c -o sender
-      - ./sender $(cat ../oauth.txt)
+      - task: build_sender
+      - ./sender $(cat ./oauth.txt)
 
   run:
     desc: Launch bot
