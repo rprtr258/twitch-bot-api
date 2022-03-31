@@ -18,11 +18,11 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struc
 #include "lib.c"
 
 i32 main(i32 argc, char** argv) {
-    if (argc != 2) {
-        printf("Usage: %s <OAUTH_TOKEN>\n", argv[0]);
+    if (argc != 3) {
+        printf("Usage: %s OAUTH_TOKEN CHANNEL\n", argv[0]);
         return 1;
     }
-    i32 socket_fd = create_socket(argv[1]);
+    i32 socket_fd = create_socket(argv[1], argv[2]);
     struct Buffer socket_buffer = create_buffer();
     struct Buffer stdin_buffer = create_buffer();
     skip_welcome_message(socket_fd);
@@ -39,7 +39,9 @@ i32 main(i32 argc, char** argv) {
             isize line_end_position;
             // send every line in buffer
             while ((line_end_position = buffer_find_char(&stdin_buffer, 0, '\n')) != -1) {
-                exit_if_fail(send_part(socket_fd, "PRIVMSG #rprtr258 :"));
+                exit_if_fail(send_part(socket_fd, "PRIVMSG #"));
+                exit_if_fail(send_part(socket_fd, argv[2]));
+                exit_if_fail(send_part(socket_fd, " :"));
                 write_buffer(socket_fd, &stdin_buffer, 0, line_end_position + 1);
                 buffer_pop(&stdin_buffer, line_end_position + 1);
             }

@@ -5,11 +5,11 @@ ssize_t write(int fd, const void* buf, size_t count);
 #include "lib.c"
 
 i32 main(i32 argc, char** argv) {
-    if (argc != 2) {
-        printf("Usage: %s <OAUTH_TOKEN>\n", argv[0]);
+    if (argc != 3) {
+        printf("Usage: %s OAUTH_TOKEN CHANNEL\n", argv[0]);
         return 1;
     }
-    i32 socket_fd = create_socket(argv[1]);
+    i32 socket_fd = create_socket(argv[1], argv[2]);
     struct Buffer buffer = create_buffer();
     skip_welcome_message(socket_fd);
     for (;;) {

@@ -167,7 +167,7 @@ static i32 send_newline(i32 socket_fd) {
     return 0;
 }
 
-static i32 create_socket(const_str oauth_token) {
+static i32 create_socket(const_str oauth_token, const_str channel) {
     i32 socket_fd;
     {
         // TODO: fix socket flapping
@@ -184,11 +184,12 @@ static i32 create_socket(const_str oauth_token) {
         exit_if_fail(send_part(socket_fd, oauth_token) == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
 
-        // TODO: why we use rprtr258 nick here??????????????
-        exit_if_fail(send_part(socket_fd, "NICK rprtr258") == -1);
+        // no matter the nick, we login
+        exit_if_fail(send_part(socket_fd, "NICK tsoding") == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
 
-        exit_if_fail(send_part(socket_fd, "JOIN #rprtr258") == -1);
+        exit_if_fail(send_part(socket_fd, "JOIN #") == -1);
+        exit_if_fail(send_part(socket_fd, channel) == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
     }
     return socket_fd;
