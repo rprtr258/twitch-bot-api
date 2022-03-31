@@ -43,6 +43,7 @@ tasks:
     desc: Checkout submodules, init database and build balaboba binary
     cmds:
       - git submodule update --init --recursive
+      - sudo apt install sqlite3
       - sqlite3 db.db < sql/init.sql
       - (cd src/balaboba; go build -o ../../balaboba cmd/cmd.go)
 
