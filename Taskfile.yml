@@ -31,16 +31,18 @@ tasks:
 
   build_balancer:
     desc: Build balancer
+    dir: balancer
     cmds:
-      - rm balancer || echo 'no balancer'
-      - rustc balancer.rs
-      - strip balancer
+      - rm ../run_balancer || echo 'no balancer'
+      - cargo build
+      - strip target/debug/balancer
+      - ln target/debug/balancer ../run_balancer
 
   run_balancer:
     desc: Run balancer
     cmds:
       - task: build_balancer
-      - ./balancer balancer_config.txt
+      - ./run_balancer balancer_config.txt
 
   run:
     desc: Launch bot
