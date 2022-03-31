@@ -32,7 +32,7 @@ i32 main(i32 argc, char** argv) {
                 // remove ping line read from buffer
                 buffer_pop(&buffer, sizeof(PING));
             } else {
-                // :rprtr258!rprtr258@rprtr258.tmi.twitch.tv PRIVMSG #rprtr258 :MMMM\r\n\0
+                // :rprtr258!rprtr258@rprtr258.tmi.twitch.tv PRIVMSG #rprtr258 :MMMM\r\n
                 //          ^                                        ^         ^         ^
                 //          bang                                     hash  second_colon  last
                 isize res_or_error;
@@ -58,7 +58,7 @@ i32 main(i32 argc, char** argv) {
                     second_colon_position = (usize)res_or_error;
                 }
                 usize last_position;
-                res_or_error = buffer_find_char(&buffer, second_colon_position, '\0');
+                res_or_error = buffer_find_char(&buffer, second_colon_position, '\n');
                 if (res_or_error == -1) {
                     break;
                 } else {
@@ -69,9 +69,10 @@ i32 main(i32 argc, char** argv) {
                 write(STDOUT_FILENO, ",", 1);
                 write_buffer(STDOUT_FILENO, &buffer, hash_position + 1, second_colon_position - hash_position - 2);
                 write(STDOUT_FILENO, ",", 1);
-                // 3 is ':' in the beginning plus "\r\n" in the end
-                write_buffer(STDOUT_FILENO, &buffer, second_colon_position + 1, last_position - second_colon_position - 3);
+                // 2 is ':' in the beginning plus "\r" in the end
+                write_buffer(STDOUT_FILENO, &buffer, second_colon_position + 1, last_position - second_colon_position - 2);
                 send_newline(STDOUT_FILENO);
+                fflush(stdout);
                 // remove line read from buffer
                 usize bytes_processed = last_position + 1;
                 buffer_pop(&buffer, bytes_processed);

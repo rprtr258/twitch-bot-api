@@ -35,7 +35,6 @@ const bool TRUE = 1;
 const bool FALSE = 0;
 #define BOOL(x) ((x) ? TRUE : FALSE)
 
-str_literal NEWLINE = "\n";
 str_literal PING = "PING :tmi.twitch.tv\r\n";
 
 #define exit_if_fail(err) if ((err) == -1) { exit(errno); }
@@ -75,8 +74,6 @@ static void buffer_dump_stdout(struct Buffer* buffer) {
                 printf("\\n");
             } else if (c == 0xd) {
                 printf("\\r");
-            } else if (c == 0x0) {
-                printf("\\0");
             } else {
                 printf("(%x)", c);
             }
@@ -154,7 +151,7 @@ static void send_part(usize socket_fd, const_str message_part) {
 }
 
 static void send_newline(usize socket_fd) {
-    exit_if_fail(write((int)socket_fd, NEWLINE, sizeof(NEWLINE)));
+    exit_if_fail(write((int)socket_fd, "\n", 1));
 }
 
 static usize create_socket(const_str oauth_token, const_str channel) {

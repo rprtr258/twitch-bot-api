@@ -71,7 +71,7 @@ i32 main(i32 argc, char** argv) {
             // process every line in buffer
             isize res_or_error;
             for (;;) {
-                res_or_error = buffer_find_char(&socket_buffer, '\0', 0);
+                res_or_error = buffer_find_char(&socket_buffer, '\n', 0);
                 usize zero_position;
                 if (res_or_error == -1) {
                     break;
