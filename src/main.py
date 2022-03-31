@@ -48,6 +48,7 @@ def action_on_message(conf: config.Config, message_record: utils.MessageRecord):
     elif command == "!feed":
         send_message(conf.twitch_config, message_record.channel, commands.feed_cmd(conf, command_message_record))
     elif command == "!commands":
+        # TODO: remove
         send_message(
             conf.twitch_config,
             message_record.channel,
