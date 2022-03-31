@@ -90,6 +90,16 @@ static void buffer_dump_stdout(struct Buffer* buffer) {
     }
     printf("\n");
 }
+
+isize buffer_find_char(struct Buffer *buffer, usize start, char c) {
+    for (usize pos = start; pos < buffer->size; ++pos) {
+        if (buffer_get(buffer, pos) == c) {
+            return pos;
+        }
+    }
+    // not found
+    return -1;
+}
 // ========== BUFFER OPS ==========
 
 static void read_buffer(usize fd, struct Buffer* buffer) {
@@ -177,7 +187,7 @@ static i32 create_socket(const_str oauth_token) {
         exit_if_fail(send_part(socket_fd, "NICK rprtr258") == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
 
-        exit_if_fail(send_part(socket_fd, "JOIN #xqcow") == -1);
+        exit_if_fail(send_part(socket_fd, "JOIN #rprtr258") == -1);
         exit_if_fail(send_newline(socket_fd) == -1);
     }
     return socket_fd;

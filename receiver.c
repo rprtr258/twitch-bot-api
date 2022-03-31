@@ -4,16 +4,6 @@ ssize_t write(int fd, const void* buf, size_t count);
 
 #include "lib.c"
 
-isize find_char_in_buffer(struct Buffer *buffer, usize start, char c) {
-    for (usize pos = start; pos < buffer->size; ++pos) {
-        if (buffer_get(buffer, pos) == c) {
-            return pos;
-        }
-    }
-    // not found
-    return -1;
-}
-
 i32 main(i32 argc, char** argv) {
     if (argc != 2) {
         printf("Usage: %s <OAUTH_TOKEN>\n", argv[0]);
@@ -39,28 +29,28 @@ i32 main(i32 argc, char** argv) {
                 //          bang                                     hash  second_colon  last
                 isize res_or_error;
                 usize bang_position;
-                res_or_error = find_char_in_buffer(&buffer, 1, '!');
+                res_or_error = buffer_find_char(&buffer, 1, '!');
                 if (res_or_error == -1) {
                     break;
                 } else {
                     bang_position = res_or_error;
                 }
                 usize hash_position;
-                res_or_error = find_char_in_buffer(&buffer, bang_position, '#');
+                res_or_error = buffer_find_char(&buffer, bang_position, '#');
                 if (res_or_error == -1) {
                     break;
                 } else {
                     hash_position = res_or_error;
                 }
                 usize second_colon_position;
-                res_or_error = find_char_in_buffer(&buffer, hash_position, ':');
+                res_or_error = buffer_find_char(&buffer, hash_position, ':');
                 if (res_or_error == -1) {
                     break;
                 } else {
                     second_colon_position = res_or_error;
                 }
                 usize last_position;
-                res_or_error = find_char_in_buffer(&buffer, second_colon_position, '\0');
+                res_or_error = buffer_find_char(&buffer, second_colon_position, '\0');
                 if (res_or_error == -1) {
                     break;
                 } else {

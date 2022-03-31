@@ -23,8 +23,8 @@ i32 main(i32 argc, char** argv) {
         return 1;
     }
     i32 socket_fd = create_socket(argv[1]);
-    struct Buffer buffer;
-    struct Buffer stdin_buffer;
+    struct Buffer socket_buffer = create_buffer();
+    struct Buffer stdin_buffer = create_buffer();
     skip_welcome_message(socket_fd);
     i32 flags = fcntl(socket_fd, F_GETFL);
     fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
@@ -36,18 +36,26 @@ i32 main(i32 argc, char** argv) {
         exit_if_fail(select(max_fd_plus_one, &read_fds, NULL, NULL, NULL));
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
             read_buffer(STDIN_FILENO, &stdin_buffer);
+            isize line_end_position;
+            // send every line in buffer
+            while ((line_end_position = buffer_find_char(&stdin_buffer, 0, '\n')) != -1) {
+                exit_if_fail(send_part(socket_fd, "PRIVMSG #rprtr258 :"));
+                write_buffer(socket_fd, &stdin_buffer, 0, line_end_position + 1);
+                buffer_pop(&stdin_buffer, line_end_position + 1);
+            }
             if (stdin_buffer.size == 0) {
                 return 0;
             }
-            exit_if_fail(send_part(socket_fd, "PRIVMSG #rprtr258 :"));
-            // TODO: do we need to send newline one more time?
-            exit_if_fail(write(socket_fd, stdin_buffer.data, stdin_buffer.size));
-            exit_if_fail(send_newline(socket_fd));
         }
         if (FD_ISSET(socket_fd, &read_fds)) {
-            read_buffer(socket_fd, &buffer);
-            if (is_ping_message(&buffer)) {
-                send_ping_response(socket_fd);
+            read_buffer(socket_fd, &socket_buffer);
+            isize zero_position;
+            // process every line in buffer
+            while ((zero_position = buffer_find_char(&socket_buffer, '\0', 0)) != -1) {
+                if (is_ping_message(&socket_buffer)) {
+                    send_ping_response(socket_fd);
+                }
+                buffer_pop(&stdin_buffer, zero_position + 1);
             }
         }
     }
