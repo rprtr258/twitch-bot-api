@@ -22,6 +22,9 @@ void exit(int status);
 #include <assert.h>
 //void assert(scalar);
 
+#include <stdio.h>
+int printf(const char *format, ...);
+
 typedef ssize_t isize;
 typedef size_t usize;
 typedef int i32;
@@ -66,6 +69,27 @@ static char buffer_get(struct Buffer* buffer, usize pos) {
     assert(pos < buffer->size);
     return buffer->data[(buffer->start + pos) % BUFFER_CAPACITY];
 }
+
+static void buffer_dump_stdout(struct Buffer* buffer) {
+    printf("BUFFER(%lu/%lu): ", buffer->start, buffer->size);
+    for (usize i = 0; i < buffer->size; ++i) {
+        char c = buffer_get(buffer, i);
+        if (c < 0xf) {
+            if (c == 0xa) {
+                printf("\\n");
+            } else if (c == 0xd) {
+                printf("\\r");
+            } else if (c == 0x0) {
+                printf("\\0");
+            } else {
+                printf("(%x)", c);
+            }
+        } else {
+            printf("%c", c);
+        }
+    }
+    printf("\n");
+}
 // ========== BUFFER OPS ==========
 
 static void read_buffer(usize fd, struct Buffer* buffer) {
@@ -76,6 +100,7 @@ static void read_buffer(usize fd, struct Buffer* buffer) {
         usize free_tail_space = BUFFER_CAPACITY - buffer_end;
         read_size = read(fd, buffer->data + buffer_end, free_tail_space);
     } else {
+        // TODO: read once to temporary buffer, then copy
         usize effective_buffer_end = buffer_end % BUFFER_CAPACITY;
         usize free_space = buffer->start - effective_buffer_end;
         read_size = read(fd, buffer->data + effective_buffer_end, free_space);
@@ -98,12 +123,13 @@ static void write_buffer(usize fd, struct Buffer* buffer, usize from, usize len)
 
 static bool is_ping_message(const struct Buffer* buffer) {
     const_str cur = PING;
-    const_str buf_cur = buffer->data;
+    const_str buf_cur = buffer->data + buffer->start;
+    const_str buf_end = buffer->data + BUFFER_CAPACITY;
     while (*buf_cur && *cur) {
         if (*buf_cur != *cur) {
             return FALSE;
         }
-        ++buf_cur;
+        buf_cur = (buf_cur == buf_end) ? buffer->data : buf_cur + 1;
         ++cur;
     }
     return !BOOL(*buf_cur || *cur);
