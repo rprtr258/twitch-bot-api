@@ -1,13 +1,18 @@
 .task/
 __pycache__/
 venv/
-*.txt
 .env
+filter.py
+c
+
+# resource files
+*.txt
 db.db
+model.json
+
+# binaries
 balaboba.exe
 balaboba
-model.json
-filter.py
+balancer
 receiver
 sender
-c

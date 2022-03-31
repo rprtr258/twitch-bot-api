@@ -10,6 +10,12 @@ tasks:
       - gcc -Wall -Wconversion receiver.c -o receiver
       - strip receiver
 
+  run_receiver:
+    desc: Run IRC receiver
+    cmds:
+      - task: build_receiver
+      - ./receiver $(cat ./oauth.txt) rprtr258
+
   build_sender:
     desc: Build IRC sender
     cmds:
@@ -17,17 +23,24 @@ tasks:
       - gcc -Wall -Wconversion sender.c -o sender
       - strip sender
 
-  run_receiver:
-    desc: Run IRC receiver
-    cmds:
-      - task: build_receiver
-      - ./receiver $(cat ./oauth.txt) rprtr258
-
   run_sender:
     desc: Run IRC sender
     cmds:
       - task: build_sender
       - ./sender $(cat ./oauth.txt) rprtr258
+
+  build_balancer:
+    desc: Build balancer
+    cmds:
+      - rm balancer || echo 'no balancer'
+      - rustc balancer.rs
+      - strip balancer
+
+  run_balancer:
+    desc: Run balancer
+    cmds:
+      - task: build_balancer
+      - ./balancer balancer_config.txt
 
   run:
     desc: Launch bot
