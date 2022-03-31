@@ -38,11 +38,7 @@ const bool FALSE = 0;
 str_literal NEWLINE = "\n";
 str_literal PING = "PING :tmi.twitch.tv\r\n";
 
-static void exit_if_fail(i32 err) {
-    if (err == -1) {
-        exit(errno);
-    }
-}
+#define exit_if_fail(err) if ((err) == -1) { exit(errno); }
 
 // ========== BUFFER OPS ==========
 #define BUFFER_CAPACITY 1024
@@ -94,7 +90,7 @@ static void buffer_dump_stdout(struct Buffer* buffer) {
 isize buffer_find_char(struct Buffer *buffer, usize start, char c) {
     for (usize pos = start; pos < buffer->size; ++pos) {
         if (buffer_get(buffer, pos) == c) {
-            return pos;
+            return (isize)pos;
         }
     }
     // not found
@@ -108,26 +104,26 @@ static void read_buffer(usize fd, struct Buffer* buffer) {
     isize read_size;
     if (buffer_end < BUFFER_CAPACITY) {
         usize free_tail_space = BUFFER_CAPACITY - buffer_end;
-        read_size = read(fd, buffer->data + buffer_end, free_tail_space);
+        read_size = read((int)fd, buffer->data + buffer_end, free_tail_space);
     } else {
         // TODO: read once to temporary buffer, then copy
         usize effective_buffer_end = buffer_end % BUFFER_CAPACITY;
         usize free_space = buffer->start - effective_buffer_end;
-        read_size = read(fd, buffer->data + effective_buffer_end, free_space);
+        read_size = read((int)fd, buffer->data + effective_buffer_end, free_space);
     }
     exit_if_fail(read_size);
-    buffer->size += read_size;
+    buffer->size += (usize)read_size;
 }
 
 static void write_buffer(usize fd, struct Buffer* buffer, usize from, usize len) {
     usize effective_start = (buffer->start + from) % BUFFER_CAPACITY;
     if (effective_start + len <= BUFFER_CAPACITY) {
-        write(fd, buffer->data + effective_start, len);
+        write((int)fd, buffer->data + effective_start, len);
     } else {
         usize tail_size = BUFFER_CAPACITY - effective_start;
         usize head_size = len - tail_size;
-        write(fd, buffer->data + effective_start, tail_size);
-        write(fd, buffer->data, head_size);
+        write((int)fd, buffer->data + effective_start, tail_size);
+        write((int)fd, buffer->data, head_size);
     }
 }
 
@@ -145,7 +141,7 @@ static bool is_ping_message(const struct Buffer* buffer) {
     return !BOOL(*buf_cur || *cur);
 }
 
-static i32 send_part(i32 socket_fd, const_str message_part) {
+static void send_part(usize socket_fd, const_str message_part) {
     usize message_part_length = 0;
     {
         const_str cur_char = message_part;
@@ -154,57 +150,51 @@ static i32 send_part(i32 socket_fd, const_str message_part) {
             ++message_part_length;
         }
     }
-    if (write(socket_fd, message_part, message_part_length) == -1) {
-        return errno;
-    }
-    return 0;
+    exit_if_fail(write((int)socket_fd, message_part, message_part_length));
 }
 
-static i32 send_newline(i32 socket_fd) {
-    if (write(socket_fd, NEWLINE, sizeof(NEWLINE)) == -1) {
-        return errno;
-    }
-    return 0;
+static void send_newline(usize socket_fd) {
+    exit_if_fail(write((int)socket_fd, NEWLINE, sizeof(NEWLINE)));
 }
 
-static i32 create_socket(const_str oauth_token, const_str channel) {
-    i32 socket_fd;
+static usize create_socket(const_str oauth_token, const_str channel) {
+    usize socket_fd;
     {
+        i32 _socket_fd;
         // TODO: fix socket flapping
-        socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (socket_fd == -1) {
-            return errno;
-        }
+        _socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+        exit_if_fail(_socket_fd);
         struct addrinfo* servers = NULL;
         exit_if_fail(getaddrinfo("irc.chat.twitch.tv", "6667", NULL, &servers));
-        exit_if_fail(connect(socket_fd, servers->ai_addr, servers->ai_addrlen));
+        exit_if_fail(connect(_socket_fd, servers->ai_addr, servers->ai_addrlen));
+        socket_fd = (usize)_socket_fd;
     }
     {
-        exit_if_fail(send_part(socket_fd, "PASS ") == -1);
-        exit_if_fail(send_part(socket_fd, oauth_token) == -1);
-        exit_if_fail(send_newline(socket_fd) == -1);
+        send_part(socket_fd, "PASS ");
+        send_part(socket_fd, oauth_token);
+        send_newline(socket_fd);
 
         // no matter the nick, we login
-        exit_if_fail(send_part(socket_fd, "NICK tsoding") == -1);
-        exit_if_fail(send_newline(socket_fd) == -1);
+        send_part(socket_fd, "NICK tsoding");
+        send_newline(socket_fd);
 
-        exit_if_fail(send_part(socket_fd, "JOIN #") == -1);
-        exit_if_fail(send_part(socket_fd, channel) == -1);
-        exit_if_fail(send_newline(socket_fd) == -1);
+        send_part(socket_fd, "JOIN #");
+        send_part(socket_fd, channel);
+        send_newline(socket_fd);
     }
-    return socket_fd;
+    return (usize)socket_fd;
 }
 
-void skip_welcome_message(i32 socket_fd) {
+void skip_welcome_message(usize socket_fd) {
     char tmp_buffer[BUFFER_CAPACITY];
     // skip welcome message
-    exit_if_fail(read(socket_fd, tmp_buffer, BUFFER_CAPACITY));
+    exit_if_fail(read((int)socket_fd, tmp_buffer, BUFFER_CAPACITY));
     // skip join channel response
-    exit_if_fail(read(socket_fd, tmp_buffer, BUFFER_CAPACITY));
+    exit_if_fail(read((int)socket_fd, tmp_buffer, BUFFER_CAPACITY));
 }
 
-void send_ping_response(i32 socket_fd) {
-    exit_if_fail(send_part(socket_fd, "PONG :tmi.twitch.tv"));
-    exit_if_fail(send_newline(socket_fd));
+void send_ping_response(usize socket_fd) {
+    send_part(socket_fd, "PONG :tmi.twitch.tv");
+    send_newline(socket_fd);
 }
 

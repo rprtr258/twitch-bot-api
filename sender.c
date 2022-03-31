@@ -31,26 +31,33 @@ i32 main(i32 argc, char** argv) {
         return 1;
     }
     const_str channel = argv[1];
-    i32 socket_fd = create_socket(oauth_token, channel);
+    usize socket_fd = create_socket(oauth_token, channel);
     skip_welcome_message(socket_fd);
     struct Buffer socket_buffer = create_buffer();
     struct Buffer stdin_buffer = create_buffer();
-    i32 flags = fcntl(socket_fd, F_GETFL);
-    fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
-    i32 max_fd_plus_one = (socket_fd > STDIN_FILENO ? socket_fd : STDIN_FILENO) + 1;
+    i32 flags = fcntl((int)socket_fd, F_GETFL);
+    fcntl((int)socket_fd, F_SETFL, flags | O_NONBLOCK);
+    usize max_fd_plus_one = (socket_fd > STDIN_FILENO ? socket_fd : STDIN_FILENO) + 1;
     for (;;) {
         fd_set read_fds;
         FD_SET(socket_fd, &read_fds);
         FD_SET(STDIN_FILENO, &read_fds);
-        exit_if_fail(select(max_fd_plus_one, &read_fds, NULL, NULL, NULL));
+        exit_if_fail(select((int)max_fd_plus_one, &read_fds, NULL, NULL, NULL));
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
             read_buffer(STDIN_FILENO, &stdin_buffer);
-            isize line_end_position;
             // send every line in buffer
-            while ((line_end_position = buffer_find_char(&stdin_buffer, 0, '\n')) != -1) {
-                exit_if_fail(send_part(socket_fd, "PRIVMSG #"));
-                exit_if_fail(send_part(socket_fd, channel));
-                exit_if_fail(send_part(socket_fd, " :"));
+            isize res_or_error;
+            for (;;) {
+                res_or_error = buffer_find_char(&stdin_buffer, 0, '\n');
+                usize line_end_position;
+                if (res_or_error == -1) {
+                    break;
+                } else {
+                    line_end_position = (usize)res_or_error;
+                }
+                send_part(socket_fd, "PRIVMSG #");
+                send_part(socket_fd, channel);
+                send_part(socket_fd, " :");
                 write_buffer(socket_fd, &stdin_buffer, 0, line_end_position + 1);
                 buffer_pop(&stdin_buffer, line_end_position + 1);
             }
@@ -61,9 +68,16 @@ i32 main(i32 argc, char** argv) {
         }
         if (FD_ISSET(socket_fd, &read_fds)) {
             read_buffer(socket_fd, &socket_buffer);
-            isize zero_position;
             // process every line in buffer
-            while ((zero_position = buffer_find_char(&socket_buffer, '\0', 0)) != -1) {
+            isize res_or_error;
+            for (;;) {
+                res_or_error = buffer_find_char(&socket_buffer, '\0', 0);
+                usize zero_position;
+                if (res_or_error == -1) {
+                    break;
+                } else {
+                    zero_position = (usize)res_or_error;
+                }
                 if (is_ping_message(&socket_buffer)) {
                     send_ping_response(socket_fd);
                 }

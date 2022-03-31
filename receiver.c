@@ -18,7 +18,7 @@ i32 main(i32 argc, char** argv) {
         return 1;
     }
     const_str channel = argv[1];
-    i32 socket_fd = create_socket(oauth_token, channel);
+    usize socket_fd = create_socket(oauth_token, channel);
     skip_welcome_message(socket_fd);
     struct Buffer buffer = create_buffer();
     for (;;) {
@@ -41,28 +41,28 @@ i32 main(i32 argc, char** argv) {
                 if (res_or_error == -1) {
                     break;
                 } else {
-                    bang_position = res_or_error;
+                    bang_position = (usize)res_or_error;
                 }
                 usize hash_position;
                 res_or_error = buffer_find_char(&buffer, bang_position, '#');
                 if (res_or_error == -1) {
                     break;
                 } else {
-                    hash_position = res_or_error;
+                    hash_position = (usize)res_or_error;
                 }
                 usize second_colon_position;
                 res_or_error = buffer_find_char(&buffer, hash_position, ':');
                 if (res_or_error == -1) {
                     break;
                 } else {
-                    second_colon_position = res_or_error;
+                    second_colon_position = (usize)res_or_error;
                 }
                 usize last_position;
                 res_or_error = buffer_find_char(&buffer, second_colon_position, '\0');
                 if (res_or_error == -1) {
                     break;
                 } else {
-                    last_position = res_or_error;
+                    last_position = (usize)res_or_error;
                 }
                 // print "{user},{channel},{data}"
                 write_buffer(STDOUT_FILENO, &buffer, 1, bang_position - 1);
