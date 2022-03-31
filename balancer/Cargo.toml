@@ -1,0 +1,10 @@
+[package]
+name = "balancer"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+regex = "1"
+
+[profile.release]
+strip = "symbols"
