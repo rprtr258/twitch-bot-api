@@ -10,13 +10,7 @@ use {
 
 type Idx = usize;
 
-enum BufferType {
-    Float,
-    U8,
-    Bool,
-    Idx,
-}
-
+// TODO: change to generics?
 #[derive(Clone, Debug)]
 enum BufferData {
     Float(Vec<f32>),
@@ -25,28 +19,41 @@ enum BufferData {
     Idx(Vec<Idx>),
 }
 
+impl From<Vec<f32>>   for BufferData { fn from(data: Vec<f32>  ) -> Self {BufferData::Float(data)}}
+impl From<Vec<u8>>    for BufferData { fn from(data: Vec<u8>   ) -> Self {BufferData::U8   (data)}}
+impl From<Vec<bool>>  for BufferData { fn from(data: Vec<bool> ) -> Self {BufferData::Bool (data)}}
+impl From<Vec<usize>> for BufferData { fn from(data: Vec<usize>) -> Self {BufferData::Idx  (data)}}
+
 #[derive(Clone, Debug)]
 struct Buffer {
     shape: Vec<u8>,
-    name: String,
+    name: Option<String>,
     data: BufferData,
+}
+
+enum BufferType {
+    Float,
+    U8,
+    Bool,
+    Idx,
 }
 
 impl Buffer {
     fn new(typee: BufferType, shape: Vec<u8>) -> Self {
         Buffer {
             shape,
-            name: "_tmp".to_owned(),
             data: match typee {
                 BufferType::Float => BufferData::Float(Vec::new()),
                 BufferType::U8 => BufferData::U8(Vec::new()),
                 BufferType::Bool => BufferData::Bool(Vec::new()),
                 BufferType::Idx => BufferData::Idx(Vec::new()),
-            }
+            },
+            name: None,
         }
     }
+
     fn name(mut self, name: String) -> Self {
-        self.name = name;
+        self.name = Some(name);
         return self
     }
 }
@@ -79,12 +86,20 @@ impl Node {
         match self {
             Node::Buffer(buf) => (**buf).clone(),
             Node::UnaryOperator {operator, ..} => {
+                // TODO: implement abs
+                // TODO: implement fract
+                // TODO: implement max#2
                 unimplemented!("Unary operator '{}' is not implemented", operator);
             },
             Node::BinaryOperator {operator, ..} => {
+                // TODO: implement >
+                // TODO: implement -
+                // TODO: implement *
+                // TODO: implement +
                 unimplemented!("Binary operator '{}' is not implemented", operator);
             },
             Node::VariadicOperator {operator, ..} => {
+                // TODO: implement stack#2
                 unimplemented!("Variadic operator '{}' is not implemented", operator);
             },
         }
@@ -94,10 +109,10 @@ impl Node {
     fn to_string(&self) -> String {
         match self {
             Node::Buffer(buf) => {
-                // shape_str = ";".join(map(str, self.shape))
+                // shape_str = ",".join(map(str, self.shape))
                 // type_str = self.type.name
-                // return f"[{self.name}={type_str}[{shape_str}]]"
-                buf.name.clone()
+                // TODO: ({name}@)?{T}[{shape}]
+                buf.name.as_ref().unwrap_or(&"no_name".to_owned()).clone()
             },
             Node::UnaryOperator {operator, dimensions, argument} => {
                 let operator_str = match dimensions {
@@ -153,8 +168,126 @@ impl<'a> TokenStream {
         (operator, dimensions)
     }
 
+    fn parse_buffer(&mut self, token: Option<String>) -> Buffer {
+        let token = token.unwrap_or_else(|| self.next());
+        if token == "[" { // array
+            let mut array_items = Vec::new();
+            while self.peek() != "]" {
+                array_items.push(self.parse_buffer(None));
+            }
+            self.next(); // "]"
+            if array_items.len() == 0 {
+                panic!("Buffer cannot be empty");
+            }
+            // assert all items have the same type and shape
+            let first_item = &array_items[0];
+            if !array_items.iter().skip(1).all(|buf| match (&first_item.data, &buf.data) {
+                (BufferData::Float(_), BufferData::Float(_)) => first_item.shape == buf.shape,
+                (BufferData::U8(_), BufferData::U8(_)) => first_item.shape == buf.shape,
+                (BufferData::Bool(_), BufferData::Bool(_)) => first_item.shape == buf.shape,
+                (BufferData::Idx(_), BufferData::Idx(_)) => first_item.shape == buf.shape,
+                _ => false,
+            }) {
+                panic!()
+            }
+            // stack them along 0
+            let result_shape = vec![];
+            let result_buffer_data = match first_item.data {
+                BufferData::Float(_) => {
+                    array_items
+                        .into_iter()
+                        .flat_map(|elem| {
+                            match elem.data {
+                                BufferData::Float(elem_data) => elem_data,
+                                _ => unreachable!(),
+                            }
+                        })
+                        .collect::<Vec<f32>>()
+                        .into()
+                },
+                BufferData::U8(_) => {
+                    array_items
+                        .into_iter()
+                        .flat_map(|elem| {
+                            match elem.data {
+                                BufferData::U8(elem_data) => elem_data,
+                                _ => unreachable!(),
+                            }
+                        })
+                        .collect::<Vec<u8>>()
+                        .into()
+                },
+                BufferData::Bool(_) => {
+                    array_items
+                        .into_iter()
+                        .flat_map(|elem| {
+                            match elem.data {
+                                BufferData::Bool(elem_data) => elem_data,
+                                _ => unreachable!(),
+                            }
+                        })
+                        .collect::<Vec<bool>>()
+                        .into()
+                },
+                BufferData::Idx(_) => {
+                    array_items
+                        .into_iter()
+                        .flat_map(|elem| {
+                            match elem.data {
+                                BufferData::Idx(elem_data) => elem_data,
+                                _ => unreachable!(),
+                            }
+                        })
+                        .collect::<Vec<Idx>>()
+                        .into()
+                },
+            };
+            Buffer {
+                data: result_buffer_data,
+                shape: result_shape,
+                name: None,
+            }
+        } else { // single item operand
+            fn lookup_buffer(_: String) -> Result<Buffer, String> {
+                // TODO: lookup known/cached buffers first
+                Ok(Buffer::new(BufferType::Float, vec![]))
+            }
+            // TODO: regexes
+            // TODO: linear/monadic interface
+            token
+                .parse::<bool>()
+                .map(|_| Buffer::new(BufferType::Bool, vec![1]))
+                .map_err(|e| e.to_string())
+                .or_else(|_| token
+                    .parse::<usize>()
+                    .map(|_| Buffer::new(BufferType::Idx, vec![1]))
+                    .map_err(|e| e.to_string())
+                    .or_else(|_| token
+                        .parse::<f32>()
+                        .map(|_| Buffer::new(BufferType::Float, vec![1]))
+                        .map_err(|e| e.to_string())
+                        .or_else(|_|
+                            if token.starts_with("0x") {
+                                Ok(1)
+                            } else {
+                                Err("ZHOPA".to_string())
+                            }
+                            .map(|_| Buffer::new(BufferType::U8, vec![1]))
+                            .map_err(|e| e.to_string())
+                            .or_else(lookup_buffer)
+                        )
+                    )
+                )
+                .unwrap()
+                .name(token.clone())
+        }
+    }
+
     // TODO: use reversed stream?
     fn parse(&mut self) -> Node {
+        if self.peek() == "[" {
+            return Node::Buffer(Rc::new(self.parse_buffer(None)))
+        }
         let token = self.next();
         if token == "(" {
             let mut left_operand = self.parse();
@@ -177,16 +310,6 @@ impl<'a> TokenStream {
                 second_argument: Box::new(right_operand),
                 dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
             }
-        } else if token == "7" || token == "0.4" || token == "0.5" || token == "x" || token == "y" { // operand
-            // TODO: write not poop
-            Node::Buffer(Rc::new(Buffer::new(BufferType::Float, match token.as_str() {
-                "7" => vec![1],//vec![7.0],
-                "0.4" => vec![1],//vec![0.4],
-                "0.5" => vec![1],//vec![0.5],
-                "x" => vec![],
-                "y" => vec![],
-                _ => unimplemented!(),
-            }).name(token.clone())))
         } else if token == "*" || token == "+" || token == "fract" || token == "<" || token == "-" || token == "abs" || token == "max" { // unary operator
             let (operator, dimensions) = self.parse_operator(Some(token));
             let operand = self.parse();
@@ -206,17 +329,8 @@ impl<'a> TokenStream {
                 arguments: operands.into_iter().collect(),
                 dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
             }
-        } else if token == "[" {
-            let mut array_items = Vec::new();
-            while self.peek() != "]" {
-                array_items.push(self.parse());
-            }
-            self.next(); // "]"
-            //array_items
-            // TODO: insert parsed items into buffer
-            Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![])))
         } else {
-            unimplemented!("wtf is '{}' you want me to parse?!, left to parse: {:?}", token, self.0.iter().rev().collect::<Vec<&String>>())
+            Node::Buffer(Rc::new(self.parse_buffer(Some(token))))
         }
     }
 }
@@ -265,7 +379,7 @@ mod tests {
     fn string_to_expression() {
         assert_eq!(
             "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract (x + y) * 7".parse::<Node>().unwrap().to_string(),
-            "((max#2 abs (stack#2 x y) - _tmp) < 0.4) * fract ((x) + y) * 7",
+            "((max#2 abs (stack#2 x y) - no_name) < 0.4) * fract ((x) + y) * 7",
         );
     }
 
