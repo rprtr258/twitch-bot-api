@@ -1,6 +1,7 @@
 use std::{
     env::args,
     process::exit,
+    rc::Rc,
 };
 use {
     regex::Regex,
@@ -70,13 +71,13 @@ enum Node {
         dimensions: OperatorDimensions, // TODO: dimensions should be property of operator
         arguments: Vec<Box<Node>>,
     },
-    Buffer(Buffer),
+    Buffer(Rc<Buffer>),
 }
 
 impl Node {
     fn eval(&self) -> Buffer {
         match self {
-            Node::Buffer(buf) => buf.clone(),
+            Node::Buffer(buf) => (**buf).clone(),
             Node::UnaryOperator {operator, ..} => {
                 unimplemented!("Unary operator '{}' is not implemented", operator);
             },
@@ -178,14 +179,14 @@ impl<'a> TokenStream {
             }
         } else if token == "7" || token == "0.4" || token == "0.5" || token == "x" || token == "y" { // operand
             // TODO: write not poop
-            Node::Buffer(Buffer::new(BufferType::Float, match token.as_str() {
+            Node::Buffer(Rc::new(Buffer::new(BufferType::Float, match token.as_str() {
                 "7" => vec![1],//vec![7.0],
                 "0.4" => vec![1],//vec![0.4],
                 "0.5" => vec![1],//vec![0.5],
                 "x" => vec![],
                 "y" => vec![],
                 _ => unimplemented!(),
-            }).name(token.clone()))
+            }).name(token.clone())))
         } else if token == "*" || token == "+" || token == "fract" || token == "<" || token == "-" || token == "abs" || token == "max" { // unary operator
             let (operator, dimensions) = self.parse_operator(Some(token));
             let operand = self.parse();
@@ -213,7 +214,7 @@ impl<'a> TokenStream {
             self.next(); // "]"
             //array_items
             // TODO: insert parsed items into buffer
-            Node::Buffer(Buffer::new(BufferType::Float, vec![]))
+            Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![])))
         } else {
             unimplemented!("wtf is '{}' you want me to parse?!, left to parse: {:?}", token, self.0.iter().rev().collect::<Vec<&String>>())
         }
@@ -226,6 +227,24 @@ impl FromIterator<String> for TokenStream {
     }
 }
 
+impl std::str::FromStr for Node {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // TODO: compile regex compile-time
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"\s*(#|max|stack|abs|-|<|fract|\+|\*|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+        }
+        Ok(RE
+            .captures_iter(s)
+            .map(|capture| capture[1].to_string())
+            .collect::<Vec<String>>()
+            .into_iter()
+            .rev()
+            .collect::<TokenStream>()
+            .parse())
+    }
+}
+
 fn main() {
     let argv = args().collect::<Vec<String>>();
     if argv.len() != 2 {
@@ -233,36 +252,33 @@ fn main() {
         exit(1);
     }
     let expression = &argv[1];
-    // TODO: compile regex compile-time
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"\s*(#|max|stack|abs|-|<|fract|\+|\*|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
-    }
-    let res = RE
-        .captures_iter(expression)
-        .map(|capture| capture[1].to_string())
-        .collect::<Vec<String>>()
-        .into_iter()
-        .rev()
-        .collect::<TokenStream>()
-        .parse()
-        .to_string();
-    println!("{}", res);
+    let ast = expression.parse::<Node>().unwrap();
+    println!("{}", ast.to_string());
 }
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
     use super::{Node, Buffer, BufferType};
 
     #[test]
-    fn expression_to_string() {
-        let x_buffer = Node::Buffer(Buffer::new(BufferType::Float, vec![]/*x.shape*/).name("x".to_owned()));
+    fn string_to_expression() {
         assert_eq!(
-            x_buffer.to_string(),
+            "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract (x + y) * 7".parse::<Node>().unwrap().to_string(),
+            "((max#2 abs (stack#2 x y) - _tmp) < 0.4) * fract ((x) + y) * 7",
+        );
+    }
+
+    #[test]
+    fn expression_to_string() {
+        let x_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*x.shape*/).name("x".to_owned()));
+        assert_eq!(
+            Node::Buffer(x_buffer.clone()).to_string(),
             "x".to_owned(),
         );
-        let y_buffer = Node::Buffer(Buffer::new(BufferType::Float, vec![]/*y.shape*/).name("y".to_owned()));
+        let y_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*y.shape*/).name("y".to_owned()));
         assert_eq!(
-            y_buffer.to_string(),
+            Node::Buffer(y_buffer.clone()).to_string(),
             "y".to_owned(),
         );
         let test_expr = Node::BinaryOperator {
@@ -277,17 +293,17 @@ mod tests {
                             operator: "-".to_owned(),
                             first_argument: Box::new(Node::VariadicOperator {
                                 operator: "stack".to_owned(),
-                                arguments: vec![Box::new(x_buffer), Box::new(y_buffer)],
+                                arguments: vec![Box::new(Node::Buffer(x_buffer.clone())), Box::new(Node::Buffer(y_buffer.clone()))],
                                 dimensions: Some(2),
                             }),
-                            second_argument: Box::new(Node::Buffer(Buffer::new(BufferType::Float, vec![2]).name("[0.5 0.5]".to_owned()))),
+                            second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![2]).name("[0.5 0.5]".to_owned())))),
                             dimensions: None,
                         }),
                         dimensions: None,
                     }),
                     dimensions: Some(2),
                 }),
-                second_argument: Box::new(Node::Buffer(Buffer::new(BufferType::Float, vec![1]).name("0.4".to_owned()))),
+                second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("0.4".to_owned())))),
                 dimensions: None,
             }),
             second_argument: Box::new(Node::UnaryOperator {
@@ -296,11 +312,11 @@ mod tests {
                     operator: "*".to_owned(),
                     first_argument: Box::new(Node::BinaryOperator {
                         operator: "+".to_owned(),
-                        first_argument: Box::new(x_buffer),
-                        second_argument: Box::new(y_buffer),
+                        first_argument: Box::new(Node::Buffer(x_buffer.clone())),
+                        second_argument: Box::new(Node::Buffer(y_buffer.clone())),
                         dimensions: None,
                     }),
-                    second_argument: Box::new(Node::Buffer(Buffer::new(BufferType::Float, vec![1]).name("7".to_owned()))),
+                    second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("7".to_owned())))),
                     dimensions: None,
                 }),
                 dimensions: None,
