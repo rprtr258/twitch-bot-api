@@ -123,21 +123,19 @@ impl Node {
     }
 }
 
-struct TokenStream {
-    stream: Vec<String>,
-}
+struct TokenStream(Vec<String>);
 
 impl<'a> TokenStream {
     fn next(&mut self) -> String {
-        self.stream.pop().unwrap()
+        self.0.pop().unwrap()
     }
 
     fn peek(&'a self) -> &'a String {
-        &self.stream.last().unwrap()
+        &self.0.last().unwrap()
     }
 
     fn is_exhausted(&self) -> bool {
-        self.stream.len() == 0
+        self.0.len() == 0
     }
 
     fn parse_operator(&mut self, token: Option<String>) -> (String, Option<String>) {
@@ -153,72 +151,78 @@ impl<'a> TokenStream {
         };
         (operator, dimensions)
     }
+
+    // TODO: use reversed stream?
+    fn parse(&mut self) -> Node {
+        let token = self.next();
+        if token == "(" {
+            let mut left_operand = self.parse();
+            while self.peek() != ")" {
+                let (operator, dimensions) = self.parse_operator(None);
+                let second_argument = self.parse();
+                left_operand = Node::BinaryOperator {
+                    operator,
+                    second_argument: Box::new(second_argument),
+                    first_argument: Box::new(left_operand),
+                    dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
+                };
+            }
+            self.next(); // ")"
+            let (operator, dimensions) = self.parse_operator(None);
+            let right_operand = self.parse();
+            Node::BinaryOperator {
+                operator,
+                first_argument: Box::new(left_operand),
+                second_argument: Box::new(right_operand),
+                dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
+            }
+        } else if token == "7" || token == "0.4" || token == "0.5" || token == "x" || token == "y" { // operand
+            // TODO: write not poop
+            Node::Buffer(Buffer::new(BufferType::Float, match token.as_str() {
+                "7" => vec![1],//vec![7.0],
+                "0.4" => vec![1],//vec![0.4],
+                "0.5" => vec![1],//vec![0.5],
+                "x" => vec![],
+                "y" => vec![],
+                _ => unimplemented!(),
+            }).name(token.clone()))
+        } else if token == "*" || token == "+" || token == "fract" || token == "<" || token == "-" || token == "abs" || token == "max" { // unary operator
+            let (operator, dimensions) = self.parse_operator(Some(token));
+            let operand = self.parse();
+            Node::UnaryOperator {
+                operator,
+                argument: Box::new(operand),
+                dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
+            }
+        } else if token == "stack" { // variadic operator
+            let (operator, dimensions) = self.parse_operator(Some(token));
+            let mut operands = Vec::new();
+            while !self.is_exhausted() && self.peek() != ")" {
+                operands.push(Box::new(self.parse()));
+            }
+            Node::VariadicOperator {
+                operator,
+                arguments: operands.into_iter().collect(),
+                dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
+            }
+        } else if token == "[" {
+            let mut array_items = Vec::new();
+            while self.peek() != "]" {
+                array_items.push(self.parse());
+            }
+            self.next(); // "]"
+            //array_items
+            // TODO: insert parsed items into buffer
+            Node::Buffer(Buffer::new(BufferType::Float, vec![]))
+        } else {
+            unimplemented!("wtf is '{}' you want me to parse?!, left to parse: {:?}", token, self.0.iter().rev().collect::<Vec<&String>>())
+        }
+    }
 }
 
-// TODO: use reversed stream?
-fn parse(token_stream: &mut TokenStream) -> Node {
-    let token = token_stream.next();
-    if token == "(" {
-        let mut left_operand = parse(token_stream);
-        while token_stream.peek() != ")" {
-            let (operator, dimensions) = token_stream.parse_operator(None);
-            let second_argument = parse(token_stream);
-            left_operand = Node::BinaryOperator {
-                operator,
-                second_argument: Box::new(second_argument),
-                first_argument: Box::new(left_operand),
-                dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
-            };
-        }
-        token_stream.next(); // ")"
-        let (operator, dimensions) = token_stream.parse_operator(None);
-        let right_operand = parse(token_stream);
-        Node::BinaryOperator {
-            operator,
-            first_argument: Box::new(left_operand),
-            second_argument: Box::new(right_operand),
-            dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
-        }
-    } else if token == "7" || token == "0.4" || token == "0.5" || token == "x" || token == "y" { // operand
-        // TODO: write not poop
-        Node::Buffer(Buffer::new(BufferType::Float, match token.as_str() {
-            "7" => vec![1],//vec![7.0],
-            "0.4" => vec![1],//vec![0.4],
-            "0.5" => vec![1],//vec![0.5],
-            "x" => vec![],
-            "y" => vec![],
-            _ => unimplemented!(),
-        }).name(token.clone()))
-    } else if token == "*" || token == "+" || token == "fract" || token == "<" || token == "-" || token == "abs" || token == "max" { // unary operator
-        let (operator, dimensions) = token_stream.parse_operator(Some(token));
-        let operand = parse(token_stream);
-        Node::UnaryOperator {
-            operator,
-            argument: Box::new(operand),
-            dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
-        }
-    } else if token == "stack" { // variadic operator
-        let (operator, dimensions) = token_stream.parse_operator(Some(token));
-        let mut operands = Vec::new();
-        while !token_stream.is_exhausted() && token_stream.peek() != ")" {
-            operands.push(Box::new(parse(token_stream)));
-        }
-        Node::VariadicOperator {
-            operator,
-            arguments: operands.into_iter().collect(),
-            dimensions: dimensions.map(|d| d.parse::<usize>().unwrap()),
-        }
-    } else if token == "[" {
-        let mut array_items = Vec::new();
-        while token_stream.peek() != "]" {
-            array_items.push(parse(token_stream));
-        }
-        token_stream.next(); // "]"
-        //array_items
-        // TODO: insert parsed items into buffer
-        Node::Buffer(Buffer::new(BufferType::Float, vec![]))
-    } else {
-        unimplemented!("wtf is '{}' you want me to parse?!, left to parse: {:?}", token, token_stream.stream.iter().rev().collect::<Vec<&String>>())
+impl FromIterator<String> for TokenStream {
+    fn from_iter<I>(iter: I) -> Self where I: std::iter::IntoIterator<Item=String> {
+        TokenStream(iter.into_iter().collect::<Vec<String>>())
     }
 }
 
@@ -233,16 +237,16 @@ fn main() {
     lazy_static! {
         static ref RE: Regex = Regex::new(r#"\s*(#|max|stack|abs|-|<|fract|\+|\*|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
     }
-    let mut token_stream = TokenStream {
-        stream: RE
-            .captures_iter(expression)
-            .map(|capture| capture[1].to_string())
-            .collect::<Vec<String>>()
-            .into_iter()
-            .rev()
-            .collect::<Vec<String>>(),
-    };
-    println!("{}", parse(&mut token_stream).to_string());
+    let res = RE
+        .captures_iter(expression)
+        .map(|capture| capture[1].to_string())
+        .collect::<Vec<String>>()
+        .into_iter()
+        .rev()
+        .collect::<TokenStream>()
+        .parse()
+        .to_string();
+    println!("{}", res);
 }
 
 #[cfg(test)]
