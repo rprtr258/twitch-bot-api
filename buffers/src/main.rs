@@ -21,17 +21,6 @@ enum BufferData {
     Idx(Vec<Idx>),
 }
 
-impl BufferData {
-    fn len(&self) -> usize {
-        match self {
-            BufferData::Float(ref dd) => dd.len(),
-            BufferData::U8(ref dd) => dd.len(),
-            BufferData::Bool(ref dd) => dd.len(),
-            BufferData::Idx(ref dd) => dd.len(),
-        }
-    }
-}
-
 impl From<Vec<f32>>  for BufferData { fn from(data: Vec<f32> ) -> Self {BufferData::Float(data)}}
 impl From<Vec<u8>>   for BufferData { fn from(data: Vec<u8>  ) -> Self {BufferData::U8   (data)}}
 impl From<Vec<bool>> for BufferData { fn from(data: Vec<bool>) -> Self {BufferData::Bool (data)}}
@@ -44,6 +33,7 @@ struct Buffer {
     data: BufferData,
 }
 
+#[allow(dead_code)]
 enum BufferType {
     Float,
     U8,
@@ -194,6 +184,24 @@ fn dump_buffer(buf: &Buffer, filename: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+#[allow(dead_code, unused_variables, unused_mut)]
+fn load_buffer(filename: &str) -> std::io::Result<Buffer> {
+    let mut file = std::fs::File::open(filename)?;
+    //let mut buf = Vec::with_capacity(file.size());
+    //file.read(&buf);
+    //let shape_len = buf[1];
+    //let shape = buf
+    //let data = match buf[0] {
+    //    0x00 => BufferData::Float(),
+    //}
+    //Ok(Buffer {
+    //    shape,
+    //    data,
+    //    name: filename,
+    //})
+    unimplemented!()
+}
+
 type OperatorDimensions = Option<Idx>;
 
 #[derive(Debug)]
@@ -211,7 +219,7 @@ impl BinaryOperatorType {
         match op {
             "*" => Ok(BinaryOperatorType::Multiplication),
             ">" => Ok(BinaryOperatorType::Greater),
-            "<" => Ok(BinaryOperatorType::Greater),
+            "<" => Ok(BinaryOperatorType::Less),
             "-" => Ok(BinaryOperatorType::Minus),
             "+" => Ok(BinaryOperatorType::Plus),
             _ => Err(format!("binary operator '{}' is not implemented", op)),
@@ -550,6 +558,8 @@ impl<'a> TokenStream {
             }
         } else {
             Node::Buffer(Rc::new(self.parse_buffer(Some(token))))
+        } else {
+            unreachable!("can't parse: {}", token)
         }
     }
 }
@@ -600,13 +610,13 @@ mod tests {
     use std::rc::Rc;
     use super::{Node, Buffer, BufferType, BufferData, BinaryOperatorType};
 
-    //#[test]
-    //fn string_to_expression() {
-    //    assert_eq!(
-    //        "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract (x + y) * 7".parse::<Node>().unwrap().to_string(),
-    //        "((max#2 abs (stack#2 x y) - no_name) < 0.4) * fract ((x) + y) * 7",
-    //    );
-    //}
+    #[test]
+    fn string_to_expression() {
+        assert_eq!(
+            "((max#2 abs (stack#2 x y) - [.5 .5]) < .4) * fract (x + y) * 7.".parse::<Node>().unwrap().to_string(),
+            "((max#2 abs (stack#2 x y) - no_name) < .4) * fract ((x) + y) * 7.",
+        );
+    }
 
     #[test]
     fn expression_to_string() {
