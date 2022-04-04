@@ -1,12 +1,13 @@
 use std::{
     env::args,
+    io::Write,
+    ops::Deref,
     process::exit,
     rc::Rc,
-    io::Write,
 };
 use {
-    regex::Regex,
     lazy_static::lazy_static,
+    regex::Regex,
 };
 
 type Idx = usize;
@@ -64,17 +65,16 @@ impl Buffer {
         }
     }
 
-    fn vector(data: BufferData) -> Self {
-        Buffer {
-            shape: vec![data.len().try_into().unwrap()],
-            data: data,
-            name: None,
-        }
-    }
-
     fn name(mut self, name: String) -> Self {
         self.name = Some(name);
         return self
+    }
+}
+
+impl Deref for Buffer {
+    type Target = BufferData;
+    fn deref(&self) -> &Self::Target {
+        &self.data
     }
 }
 
@@ -152,7 +152,6 @@ impl Node {
                     BinaryOperatorType::Multiplication => {
                         let first_buf = first_argument.eval();
                         let second_buf = second_argument.eval();
-                        println!("{:?} {:?}", first_buf, second_buf);
                         Buffer {
                             data: match (first_buf.data, second_buf.data) {
                                 // * :: (float, float) -> float
@@ -258,72 +257,79 @@ impl<'a> TokenStream {
             if array_items.len() == 0 {
                 panic!("Buffer cannot be empty");
             }
-            // assert all items have the same type and shape
-            let first_item = &array_items[0];
-            if !array_items.iter().skip(1).all(|buf| match (&first_item.data, &buf.data) {
-                (BufferData::Float(_), BufferData::Float(_)) => first_item.shape == buf.shape,
-                (BufferData::U8(_), BufferData::U8(_)) => first_item.shape == buf.shape,
-                (BufferData::Bool(_), BufferData::Bool(_)) => first_item.shape == buf.shape,
-                (BufferData::Idx(_), BufferData::Idx(_)) => first_item.shape == buf.shape,
-                _ => false,
-            }) {
-                panic!()
+            {
+                let first_item = &array_items[0];
+                if !array_items.iter().skip(1).all(|buf| match (&first_item.data, &buf.data) {
+                    (BufferData::Float(_), BufferData::Float(_)) => true,
+                    (BufferData::U8(_), BufferData::U8(_)) => true,
+                    (BufferData::Bool(_), BufferData::Bool(_)) => true,
+                    (BufferData::Idx(_), BufferData::Idx(_)) => true,
+                    _ => false,
+                } && first_item.shape == buf.shape) {
+                    panic!("all items must have the same type and shape")
+                }
             }
+            let (mut shapes, datas): (Vec<Vec<u8>>, Vec<BufferData>) = array_items
+                .into_iter()
+                .map(|Buffer {shape, data, ..}| (shape, data))
+                .unzip();
+            let first_dim = shapes.len().try_into().unwrap();
+            let one_of_the_shapes = shapes.remove(shapes.len() - 1);
             // stack them along 0
-            let result_shape = vec![];
-            let result_buffer_data = match first_item.data {
-                BufferData::Float(_) => {
-                    array_items
-                        .into_iter()
-                        .flat_map(|elem| {
-                            match elem.data {
-                                BufferData::Float(elem_data) => elem_data,
-                                _ => unreachable!(),
-                            }
-                        })
-                        .collect::<Vec<f32>>()
-                        .into()
-                },
-                BufferData::U8(_) => {
-                    array_items
-                        .into_iter()
-                        .flat_map(|elem| {
-                            match elem.data {
-                                BufferData::U8(elem_data) => elem_data,
-                                _ => unreachable!(),
-                            }
-                        })
-                        .collect::<Vec<u8>>()
-                        .into()
-                },
-                BufferData::Bool(_) => {
-                    array_items
-                        .into_iter()
-                        .flat_map(|elem| {
-                            match elem.data {
-                                BufferData::Bool(elem_data) => elem_data,
-                                _ => unreachable!(),
-                            }
-                        })
-                        .collect::<Vec<bool>>()
-                        .into()
-                },
-                BufferData::Idx(_) => {
-                    array_items
-                        .into_iter()
-                        .flat_map(|elem| {
-                            match elem.data {
-                                BufferData::Idx(elem_data) => elem_data,
-                                _ => unreachable!(),
-                            }
-                        })
-                        .collect::<Vec<Idx>>()
-                        .into()
-                },
-            };
             Buffer {
-                data: result_buffer_data,
-                shape: result_shape,
+                shape: std::iter::once(first_dim)
+                    .chain(one_of_the_shapes.into_iter())
+                    .collect(),
+                data: match datas[0] {
+                    BufferData::Float(_) => {
+                        datas
+                            .into_iter()
+                            .flat_map(|elem| {
+                                match elem {
+                                    BufferData::Float(elem_data) => elem_data,
+                                    _ => unreachable!(),
+                                }
+                            })
+                            .collect::<Vec<f32>>()
+                            .into()
+                    },
+                    BufferData::U8(_) => {
+                        datas
+                            .into_iter()
+                            .flat_map(|elem| {
+                                match elem {
+                                    BufferData::U8(elem_data) => elem_data,
+                                    _ => unreachable!(),
+                                }
+                            })
+                            .collect::<Vec<u8>>()
+                            .into()
+                    },
+                    BufferData::Bool(_) => {
+                        datas
+                            .into_iter()
+                            .flat_map(|elem| {
+                                match elem {
+                                    BufferData::Bool(elem_data) => elem_data,
+                                    _ => unreachable!(),
+                                }
+                            })
+                            .collect::<Vec<bool>>()
+                            .into()
+                    },
+                    BufferData::Idx(_) => {
+                        datas
+                            .into_iter()
+                            .flat_map(|elem| {
+                                match elem {
+                                    BufferData::Idx(elem_data) => elem_data,
+                                    _ => unreachable!(),
+                                }
+                            })
+                            .collect::<Vec<Idx>>()
+                            .into()
+                    },
+                },
                 name: None,
             }
         } else { // single item operand
@@ -335,15 +341,27 @@ impl<'a> TokenStream {
             // TODO: linear/monadic interface
             token
                 .parse::<bool>()
-                .map(|x| Buffer::vector(BufferData::Bool(vec![x])))
+                .map(|x| Buffer {
+                    data: BufferData::Bool(vec![x]),
+                    shape: vec![],
+                    name: None,
+                })
                 .map_err(|e| e.to_string())
                 .or_else(|_| token
-                    .parse::<usize>()
-                    .map(|x| Buffer::vector(BufferData::Idx(vec![x])))
+                    .parse::<Idx>()
+                    .map(|x| Buffer {
+                        data: BufferData::Idx(vec![x]),
+                        shape: vec![],
+                        name: None,
+                    })
                     .map_err(|e| e.to_string())
                     .or_else(|_| token
                         .parse::<f32>()
-                        .map(|x| Buffer::vector(BufferData::Float(vec![x])))
+                        .map(|x| Buffer {
+                            data: BufferData::Float(vec![x]),
+                            shape: vec![],
+                            name: None,
+                        })
                         .map_err(|e| e.to_string())
                         .or_else(|_|
                             if token.starts_with("0x") {
@@ -351,7 +369,11 @@ impl<'a> TokenStream {
                             } else {
                                 Err("ZHOPA".to_string())
                             }
-                            .map(|x| Buffer::vector(BufferData::U8(vec![x])))
+                            .map(|x| Buffer {
+                                data: BufferData::U8(vec![x]),
+                                shape: vec![],
+                                name: None,
+                            })
                             .map_err(|e| e.to_string())
                             .or_else(lookup_buffer)
                         )
@@ -444,10 +466,11 @@ fn main() {
     let expression = &argv[1];
     // TODO: fix "2 * 2"
     let ast = expression.parse::<Node>().unwrap();
-    // TODO: check ast correctness
-    println!("{:?}", ast);
     println!("{}", ast.to_string());
-    dump_buffer(&ast.eval(), "test.buf").unwrap();
+    // TODO: check ast correctness
+    let res = ast.eval();
+    println!("{:?}", res);
+    dump_buffer(&res, "test.buf").unwrap();
     // format!("{}.buf", buf.name)
 }
 
