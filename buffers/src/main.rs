@@ -71,6 +71,94 @@ impl Buffer {
     }
 }
 
+fn stack_along(array: Vec<Buffer>, dim: usize) -> Buffer {
+    {
+        if dim > array.len() {
+            panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
+        }
+        let first_item = &array[0];
+        if !array.iter().skip(1).all(|buf| match (&first_item.data, &buf.data) {
+            (BufferData::Float(_), BufferData::Float(_)) => true,
+            (BufferData::U8(_), BufferData::U8(_)) => true,
+            (BufferData::Bool(_), BufferData::Bool(_)) => true,
+            (BufferData::Idx(_), BufferData::Idx(_)) => true,
+            _ => false,
+        } && first_item.shape == buf.shape) {
+            panic!("all items must have the same type and shape");
+        }
+    }
+    let mut resulting_shape = Vec::with_capacity(array.len() + 1);
+    let (mut shapes, datas): (Vec<Vec<u8>>, Vec<BufferData>) = array
+        .into_iter()
+        .map(|Buffer {shape, data, ..}| (shape, data))
+        .unzip();
+    let dim_along = shapes.len().try_into().unwrap();
+    let stack_dim = shapes.remove(shapes.len() - 1);
+    for x in stack_dim.iter().take(dim) {
+        resulting_shape.push(*x);
+    }
+    resulting_shape.push(dim_along);
+    for x in stack_dim.iter().skip(dim) {
+        resulting_shape.push(*x);
+    }
+    // stack them along 0
+    // TODO: stack not only along 0
+    Buffer {
+        shape: resulting_shape,
+        data: match datas[0] {
+            BufferData::Float(_) => {
+                datas
+                    .into_iter()
+                    .flat_map(|elem| {
+                        match elem {
+                            BufferData::Float(elem_data) => elem_data,
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect::<Vec<f32>>()
+                    .into()
+            },
+            BufferData::U8(_) => {
+                datas
+                    .into_iter()
+                    .flat_map(|elem| {
+                        match elem {
+                            BufferData::U8(elem_data) => elem_data,
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect::<Vec<u8>>()
+                    .into()
+            },
+            BufferData::Bool(_) => {
+                datas
+                    .into_iter()
+                    .flat_map(|elem| {
+                        match elem {
+                            BufferData::Bool(elem_data) => elem_data,
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect::<Vec<bool>>()
+                    .into()
+            },
+            BufferData::Idx(_) => {
+                datas
+                    .into_iter()
+                    .flat_map(|elem| {
+                        match elem {
+                            BufferData::Idx(elem_data) => elem_data,
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect::<Vec<Idx>>()
+                    .into()
+            },
+        },
+        name: None,
+    }
+}
+
 impl Deref for Buffer {
     type Target = BufferData;
     fn deref(&self) -> &Self::Target {
@@ -249,89 +337,15 @@ impl<'a> TokenStream {
     fn parse_buffer(&mut self, token: Option<String>) -> Buffer {
         let token = token.unwrap_or_else(|| self.next());
         if token == "[" { // array
-            let mut array_items = Vec::new();
+            let mut array = Vec::new();
             while self.peek() != "]" {
-                array_items.push(self.parse_buffer(None));
+                array.push(self.parse_buffer(None));
             }
             self.next(); // "]"
-            if array_items.len() == 0 {
+            if array.len() == 0 {
                 panic!("Buffer cannot be empty");
             }
-            {
-                let first_item = &array_items[0];
-                if !array_items.iter().skip(1).all(|buf| match (&first_item.data, &buf.data) {
-                    (BufferData::Float(_), BufferData::Float(_)) => true,
-                    (BufferData::U8(_), BufferData::U8(_)) => true,
-                    (BufferData::Bool(_), BufferData::Bool(_)) => true,
-                    (BufferData::Idx(_), BufferData::Idx(_)) => true,
-                    _ => false,
-                } && first_item.shape == buf.shape) {
-                    panic!("all items must have the same type and shape")
-                }
-            }
-            let (mut shapes, datas): (Vec<Vec<u8>>, Vec<BufferData>) = array_items
-                .into_iter()
-                .map(|Buffer {shape, data, ..}| (shape, data))
-                .unzip();
-            let first_dim = shapes.len().try_into().unwrap();
-            let one_of_the_shapes = shapes.remove(shapes.len() - 1);
-            // stack them along 0
-            Buffer {
-                shape: std::iter::once(first_dim)
-                    .chain(one_of_the_shapes.into_iter())
-                    .collect(),
-                data: match datas[0] {
-                    BufferData::Float(_) => {
-                        datas
-                            .into_iter()
-                            .flat_map(|elem| {
-                                match elem {
-                                    BufferData::Float(elem_data) => elem_data,
-                                    _ => unreachable!(),
-                                }
-                            })
-                            .collect::<Vec<f32>>()
-                            .into()
-                    },
-                    BufferData::U8(_) => {
-                        datas
-                            .into_iter()
-                            .flat_map(|elem| {
-                                match elem {
-                                    BufferData::U8(elem_data) => elem_data,
-                                    _ => unreachable!(),
-                                }
-                            })
-                            .collect::<Vec<u8>>()
-                            .into()
-                    },
-                    BufferData::Bool(_) => {
-                        datas
-                            .into_iter()
-                            .flat_map(|elem| {
-                                match elem {
-                                    BufferData::Bool(elem_data) => elem_data,
-                                    _ => unreachable!(),
-                                }
-                            })
-                            .collect::<Vec<bool>>()
-                            .into()
-                    },
-                    BufferData::Idx(_) => {
-                        datas
-                            .into_iter()
-                            .flat_map(|elem| {
-                                match elem {
-                                    BufferData::Idx(elem_data) => elem_data,
-                                    _ => unreachable!(),
-                                }
-                            })
-                            .collect::<Vec<Idx>>()
-                            .into()
-                    },
-                },
-                name: None,
-            }
+            stack_along(array, 0)
         } else { // single item operand
             fn lookup_buffer(_: String) -> Result<Buffer, String> {
                 // TODO: lookup known/cached buffers first
