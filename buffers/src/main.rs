@@ -598,75 +598,75 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
-    use super::{Node, Buffer, BufferType, BufferData};
-
-    #[test]
-    fn string_to_expression() {
-        assert_eq!(
-            "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract (x + y) * 7".parse::<Node>().unwrap().to_string(),
-            "((max#2 abs (stack#2 x y) - no_name) < 0.4) * fract ((x) + y) * 7",
-        );
-    }
+    use super::{Node, Buffer, BufferType, BufferData, BinaryOperatorType};
 
     //#[test]
-    //fn expression_to_string() {
-    //    let x_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*x.shape*/).name("x".to_owned()));
+    //fn string_to_expression() {
     //    assert_eq!(
-    //        Node::Buffer(x_buffer.clone()).to_string(),
-    //        "x".to_owned(),
-    //    );
-    //    let y_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*y.shape*/).name("y".to_owned()));
-    //    assert_eq!(
-    //        Node::Buffer(y_buffer.clone()).to_string(),
-    //        "y".to_owned(),
-    //    );
-    //    let test_expr = Node::BinaryOperator {
-    //        operator: "*".to_owned(),
-    //        first_argument: Box::new(Node::BinaryOperator {
-    //            operator: "<".to_owned(),
-    //            first_argument: Box::new(Node::UnaryOperator {
-    //                operator: "max".to_owned(),
-    //                argument: Box::new(Node::UnaryOperator {
-    //                    operator: "abs".to_owned(),
-    //                    argument: Box::new(Node::BinaryOperator {
-    //                        operator: "-".to_owned(),
-    //                        first_argument: Box::new(Node::VariadicOperator {
-    //                            operator: "stack".to_owned(),
-    //                            arguments: vec![Box::new(Node::Buffer(x_buffer.clone())), Box::new(Node::Buffer(y_buffer.clone()))],
-    //                            dimensions: Some(2),
-    //                        }),
-    //                        second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![2]).name("[0.5 0.5]".to_owned())))),
-    //                        dimensions: None,
-    //                    }),
-    //                    dimensions: None,
-    //                }),
-    //                dimensions: Some(2),
-    //            }),
-    //            second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("0.4".to_owned())))),
-    //            dimensions: None,
-    //        }),
-    //        second_argument: Box::new(Node::UnaryOperator {
-    //            operator: "fract".to_owned(),
-    //            argument: Box::new(Node::BinaryOperator {
-    //                operator: "*".to_owned(),
-    //                first_argument: Box::new(Node::BinaryOperator {
-    //                    operator: "+".to_owned(),
-    //                    first_argument: Box::new(Node::Buffer(x_buffer.clone())),
-    //                    second_argument: Box::new(Node::Buffer(y_buffer.clone())),
-    //                    dimensions: None,
-    //                }),
-    //                second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("7".to_owned())))),
-    //                dimensions: None,
-    //            }),
-    //            dimensions: None,
-    //        }),
-    //        dimensions: None,
-    //    };
-    //    assert_eq!(
-    //        test_expr.to_string(),
-    //        "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract ((x) + y) * 7".to_owned(),
+    //        "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract (x + y) * 7".parse::<Node>().unwrap().to_string(),
+    //        "((max#2 abs (stack#2 x y) - no_name) < 0.4) * fract ((x) + y) * 7",
     //    );
     //}
+
+    #[test]
+    fn expression_to_string() {
+        let x_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*x.shape*/).name("x".to_owned()));
+        assert_eq!(
+            Node::Buffer(x_buffer.clone()).to_string(),
+            "x".to_owned(),
+        );
+        let y_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*y.shape*/).name("y".to_owned()));
+        assert_eq!(
+            Node::Buffer(y_buffer.clone()).to_string(),
+            "y".to_owned(),
+        );
+        let test_expr = Node::BinaryOperator {
+            operator: BinaryOperatorType::Multiplication,
+            first_argument: Box::new(Node::BinaryOperator {
+                operator: BinaryOperatorType::Less,
+                first_argument: Box::new(Node::UnaryOperator {
+                    operator: "max".to_owned(),
+                    argument: Box::new(Node::UnaryOperator {
+                        operator: "abs".to_owned(),
+                        argument: Box::new(Node::BinaryOperator {
+                            operator: BinaryOperatorType::Minus,
+                            first_argument: Box::new(Node::VariadicOperator {
+                                operator: "stack".to_owned(),
+                                arguments: vec![Box::new(Node::Buffer(x_buffer.clone())), Box::new(Node::Buffer(y_buffer.clone()))],
+                                dimensions: Some(2),
+                            }),
+                            second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![2]).name("[0.5 0.5]".to_owned())))),
+                            dimensions: None,
+                        }),
+                        dimensions: None,
+                    }),
+                    dimensions: Some(2),
+                }),
+                second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("0.4".to_owned())))),
+                dimensions: None,
+            }),
+            second_argument: Box::new(Node::UnaryOperator {
+                operator: "fract".to_owned(),
+                argument: Box::new(Node::BinaryOperator {
+                    operator: BinaryOperatorType::Multiplication,
+                    first_argument: Box::new(Node::BinaryOperator {
+                        operator: BinaryOperatorType::Plus,
+                        first_argument: Box::new(Node::Buffer(x_buffer.clone())),
+                        second_argument: Box::new(Node::Buffer(y_buffer.clone())),
+                        dimensions: None,
+                    }),
+                    second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("7".to_owned())))),
+                    dimensions: None,
+                }),
+                dimensions: None,
+            }),
+            dimensions: None,
+        };
+        assert_eq!(
+            test_expr.to_string(),
+            "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract ((x) + y) * 7".to_owned(),
+        );
+    }
 
     #[test]
     fn adamar_product() {
