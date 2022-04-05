@@ -229,6 +229,7 @@ impl BinaryOperatorType {
     }
 
     // TODO: impl Debug
+    #[allow(dead_code)]
     fn to_string(&self) -> String {
         match self {
             BinaryOperatorType::Multiplication => "*",
@@ -242,6 +243,7 @@ impl BinaryOperatorType {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum Node {
     UnaryOperator {
         operator: String, // TODO; replace with enum
@@ -388,6 +390,7 @@ impl Node {
     }
 
     // TODO: move to Debug implementation
+    #[allow(dead_code)]
     fn to_string(&self) -> String {
         match self {
             Node::Buffer(buf) => {
@@ -618,10 +621,8 @@ fn main() {
     }
     let expression = &argv[1];
     let ast = expression.parse::<Node>().unwrap();
-    println!("{}", ast.to_string());
     // TODO: check ast correctness
     let res = ast.eval();
-    println!("{:?}", res);
     dump_buffer(&res, "test.buf").unwrap();
     // dump_buffer(&res, format!("{}.buf", buf.name)).unwrap();
 }
