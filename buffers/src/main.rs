@@ -516,7 +516,7 @@ impl<'a> TokenStream {
             }
             let res = OperatorOrOperand::Operand(self.parse());
             if self.next().unwrap() != ")" {
-                unreachable!();
+                panic!("Expected ')' after end of expression");
             }
             res
         } else if token == "[" || !is_operator(token) {
