@@ -211,6 +211,7 @@ enum BinaryOperatorType {
     Less,
     Minus,
     Plus,
+    Stack,
 }
 
 impl BinaryOperatorType {
@@ -222,6 +223,7 @@ impl BinaryOperatorType {
             "<" => Ok(BinaryOperatorType::Less),
             "-" => Ok(BinaryOperatorType::Minus),
             "+" => Ok(BinaryOperatorType::Plus),
+            "stack" => Ok(BinaryOperatorType::Stack),
             _ => Err(format!("binary operator '{}' is not implemented", op)),
         }
     }
@@ -234,6 +236,7 @@ impl BinaryOperatorType {
             BinaryOperatorType::Less => "<",
             BinaryOperatorType::Minus => "-",
             BinaryOperatorType::Plus => "+",
+            BinaryOperatorType::Stack => "stack",
         }.to_owned()
     }
 }
@@ -250,11 +253,6 @@ enum Node {
         dimensions: OperatorDimensions, // TODO: dimensions should be property of operator
         first_argument: Box<Node>,
         second_argument: Box<Node>,
-    },
-    VariadicOperator {
-        operator: String, // TODO; replace with enum
-        dimensions: OperatorDimensions, // TODO: dimensions should be property of operator
-        arguments: Vec<Box<Node>>,
     },
     Buffer(Rc<Buffer>),
 }
@@ -381,11 +379,10 @@ impl Node {
                             name: None,
                         }
                     },
+                    BinaryOperatorType::Stack => {
+                        stack_along(vec![first_buf, second_buf], 0)
+                    }
                 }
-            },
-            Node::VariadicOperator {operator, ..} => {
-                // TODO: implement stack#2
-                unimplemented!("Variadic operator '{}' is not implemented", operator);
             },
         }
     }
@@ -412,52 +409,44 @@ impl Node {
                     None => "".to_owned(),
                 }), second_argument.to_string())
             },
-            Node::VariadicOperator {operator, dimensions, arguments} => {
-                let operator_str = match dimensions {
-                    Some(dims) => format!("{}#{:?}", operator, dims),
-                    None => operator.to_string(),
-                };
-                format!("{} {}", operator_str, arguments.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(" "))
-            },
         }
     }
 }
 
 struct TokenStream(Vec<String>);
 
+#[derive(Debug)]
+enum OperatorOrOperand {
+    Operator(String),
+    Operand(Node),
+}
+
 impl<'a> TokenStream {
-    fn next(&mut self) -> String {
-        self.0.pop().unwrap()
+    fn next(&mut self) -> Option<String> {
+        self.0.pop()
     }
 
-    fn peek(&'a self) -> &'a String {
-        &self.0.last().unwrap()
+    fn peek(&'a self) -> Option<&'a String> {
+        self.0.last()
     }
 
-    fn is_exhausted(&self) -> bool {
-        self.0.len() == 0
-    }
-
-    fn parse_operator(&mut self, token: Option<String>) -> (String, Option<String>) {
-        let operator = token.unwrap_or_else(|| self.next());
-        let dimensions = if (operator == "max" || operator == "stack") && self.peek() == "#" {
-            self.next(); // "#"
-            // TODO: multidimensinal operators
-            //if token_stream.peek() == "[":
-            //    return str(parse(token_stream))
-            Some(self.next())
+    fn parse_operator(&mut self, operator: String) -> (String, Option<String>) {
+        // TODO: multidimensinal operators??
+        if operator.starts_with("max#") {
+            ("max".to_owned(), Some(operator[4..].to_owned()))
+        } else if operator.starts_with("stack#") {
+            ("stack".to_owned(), Some(operator[6..].to_owned()))
         } else {
-            None
-        };
-        (operator, dimensions)
+            (operator, None)
+        }
     }
 
-    fn parse_buffer(&mut self, token: Option<String>) -> Buffer {
-        let token = token.unwrap_or_else(|| self.next());
+    fn parse_buffer(&mut self) -> Buffer {
+        let token = self.next().unwrap();
         if token == "[" { // array
             let mut array = Vec::new();
-            while self.peek() != "]" {
-                array.push(self.parse_buffer(None));
+            while self.peek().unwrap() != "]" {
+                array.push(self.parse_buffer());
             }
             self.next(); // "]"
             if array.len() == 0 {
@@ -516,51 +505,82 @@ impl<'a> TokenStream {
         }
     }
 
-    // TODO: use reversed stream?
-    fn parse(&mut self) -> Node {
-        if self.peek() == "[" {
-            return Node::Buffer(Rc::new(self.parse_buffer(None)))
+    fn parse_operator_or_operand(&mut self) -> OperatorOrOperand {
+        fn is_operator(token: &str) -> bool {
+            token == "fract" || token == "-" || token == "abs" || token.starts_with("max") || token.starts_with("stack")
         }
-        let token = self.next();
+        let token = self.peek().unwrap();
         if token == "(" {
-            let mut left_operand = self.parse();
-            while self.peek() != ")" {
-                let (operator, dimensions) = self.parse_operator(None);
-                let binary_operator = BinaryOperatorType::from_str(operator.as_str()).unwrap();
-                let second_argument = self.parse();
-                left_operand = Node::BinaryOperator {
-                    operator: binary_operator,
-                    second_argument: Box::new(second_argument),
-                    first_argument: Box::new(left_operand),
-                    dimensions: dimensions.map(|d| d.parse::<Idx>().unwrap()),
-                };
+            if self.next().unwrap() != "(" {
+                unreachable!();
             }
-            self.next(); // ")"
-            left_operand
-        } else if token == "fract" || token == "-" || token == "abs" || token == "max" { // unary operator
-            let (operator, dimensions) = self.parse_operator(Some(token));
-            let operand = self.parse();
-            Node::UnaryOperator {
-                operator,
-                argument: Box::new(operand),
-                dimensions: dimensions.map(|d| d.parse::<Idx>().unwrap()),
+            let res = OperatorOrOperand::Operand(self.parse());
+            if self.next().unwrap() != ")" {
+                unreachable!();
             }
-        } else if token == "stack" { // variadic operator
-            let (operator, dimensions) = self.parse_operator(Some(token));
-            let mut operands = Vec::new();
-            while !self.is_exhausted() && self.peek() != ")" {
-                operands.push(Box::new(self.parse()));
-            }
-            Node::VariadicOperator {
-                operator,
-                arguments: operands.into_iter().collect(),
-                dimensions: dimensions.map(|d| d.parse::<Idx>().unwrap()),
-            }
+            res
+        } else if token == "[" || !is_operator(token) {
+            OperatorOrOperand::Operand(Node::Buffer(Rc::new(self.parse_buffer())))
         } else {
-            Node::Buffer(Rc::new(self.parse_buffer(Some(token))))
-        } else {
-            unreachable!("can't parse: {}", token)
+            OperatorOrOperand::Operator(self.next().unwrap())
         }
+    }
+
+    fn parse(&mut self) -> Node {
+        // TODO: disallow operator_named identifiers
+        #[derive(Debug)]
+        enum UnaryOp {
+            UnaryOperator(String),
+            BinaryOperator(String, Node),
+        }
+        let mut unary_ops_stack = Vec::new();
+        let first_argument = loop {
+            unary_ops_stack.push(
+                match self.parse_operator_or_operand() {
+                    OperatorOrOperand::Operator(op) => {
+                        UnaryOp::UnaryOperator(op)
+                    },
+                    OperatorOrOperand::Operand(x) => {
+                        match self.peek() {
+                            Some(binary_operator) if binary_operator == ")" => break x,
+                            None => break x,
+                            _ => {},
+                        }
+                        UnaryOp::BinaryOperator(self.next().unwrap(), x)
+                    },
+                }
+            );
+        };
+        // self.next(); // TODO: assert ")" here and similar places
+        unary_ops_stack
+            .into_iter()
+            .rev()
+            .fold(
+                first_argument,
+                |acc, op| {
+                    match op {
+                        UnaryOp::UnaryOperator(operator) => {
+                            let (op, dims) = self.parse_operator(operator);
+                            let dims = dims.map(|d| d.parse::<Idx>().unwrap());
+                            Node::UnaryOperator {
+                                operator: op,
+                                argument: Box::new(acc),
+                                dimensions: dims,
+                            }
+                        },
+                        UnaryOp::BinaryOperator(operator, buf) => {
+                            let (op, dims) = self.parse_operator(operator);
+                            let dims = dims.map(|d| d.parse::<Idx>().unwrap());
+                            Node::BinaryOperator {
+                                operator: BinaryOperatorType::from_str(op.as_str()).unwrap(),
+                                first_argument: Box::new(buf),
+                                second_argument: Box::new(acc),
+                                dimensions: dims,
+                            }
+                        },
+                    }
+                }
+            )
     }
 }
 
@@ -574,8 +594,9 @@ impl std::str::FromStr for Node {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: compile regex compile-time
+        // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*(#|max|stack|abs|-|<|>|fract|\+|\*|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|-|<|>|fract|\+|\*)(#\d*(\.5)?)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
@@ -585,6 +606,7 @@ impl std::str::FromStr for Node {
             .rev()
             .collect::<TokenStream>()
             .parse())
+        // TODO: check stream ended
     }
 }
 
@@ -595,7 +617,6 @@ fn main() {
         exit(1);
     }
     let expression = &argv[1];
-    // TODO: fix "2 * 2"
     let ast = expression.parse::<Node>().unwrap();
     println!("{}", ast.to_string());
     // TODO: check ast correctness
@@ -613,8 +634,22 @@ mod tests {
     #[test]
     fn string_to_expression() {
         assert_eq!(
-            "((max#2 abs (stack#2 x y) - [.5 .5]) < .4) * fract (x + y) * 7.".parse::<Node>().unwrap().to_string(),
-            "((max#2 abs (stack#2 x y) - no_name) < .4) * fract ((x) + y) * 7.",
+            "(.4 > max#2 abs (x stack#2 y) - [.5 .5]) * 7. * fract x + y"
+                .parse::<Node>()
+                .unwrap()
+                .to_string(),
+            "((.4) > max#2 abs ((x) stack#2 y) - no_name) * (7.) * fract (x) + y",
+        );
+    }
+
+    #[test]
+    fn string_to_expression_simple() {
+        assert_eq!(
+            "(.4 > (x stack#2 y) - [.5 .5])"
+                .parse::<Node>()
+                .unwrap()
+                .to_string(),
+            "(.4) > ((x) stack#2 y) - no_name",
         );
     }
 
@@ -640,9 +675,10 @@ mod tests {
                         operator: "abs".to_owned(),
                         argument: Box::new(Node::BinaryOperator {
                             operator: BinaryOperatorType::Minus,
-                            first_argument: Box::new(Node::VariadicOperator {
-                                operator: "stack".to_owned(),
-                                arguments: vec![Box::new(Node::Buffer(x_buffer.clone())), Box::new(Node::Buffer(y_buffer.clone()))],
+                            first_argument: Box::new(Node::BinaryOperator {
+                                operator: BinaryOperatorType::Stack,
+                                first_argument: Box::new(Node::Buffer(x_buffer.clone())),
+                                second_argument: Box::new(Node::Buffer(y_buffer.clone())),
                                 dimensions: Some(2),
                             }),
                             second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![2]).name("[0.5 0.5]".to_owned())))),
@@ -674,7 +710,7 @@ mod tests {
         };
         assert_eq!(
             test_expr.to_string(),
-            "((max#2 abs (stack#2 x y) - [0.5 0.5]) < 0.4) * fract ((x) + y) * 7".to_owned(),
+            "((max#2 abs ((x) stack#2 y) - [0.5 0.5]) < 0.4) * fract ((x) + y) * 7".to_owned(),
         );
     }
 
@@ -685,6 +721,42 @@ mod tests {
             Buffer {
                 shape: vec![2, 2],
                 data: BufferData::Idx(vec![1, 4, 9, 16]),
+                name: None,
+            },
+        );
+    }
+
+    #[test]
+    fn test_eval_4() {
+        assert_eq!(
+            "2*2".parse::<Node>().unwrap().eval(),
+            Buffer {
+                shape: vec![],
+                data: BufferData::Idx(vec![4]),
+                name: None,
+            },
+        );
+    }
+
+    #[test]
+    fn test_eval_6() {
+        assert_eq!(
+            "2+2*2".parse::<Node>().unwrap().eval(),
+            Buffer {
+                shape: vec![],
+                data: BufferData::Idx(vec![6]),
+                name: None,
+            },
+        );
+    }
+
+    #[test]
+    fn test_eval_8() {
+        assert_eq!(
+            "2*2+2".parse::<Node>().unwrap().eval(),
+            Buffer {
+                shape: vec![],
+                data: BufferData::Idx(vec![8]),
                 name: None,
             },
         );
