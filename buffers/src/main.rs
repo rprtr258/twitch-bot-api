@@ -10,7 +10,7 @@ use {
     regex::Regex,
 };
 
-type Idx = u16;
+type Idx = usize;
 
 // TODO: change to generics?
 #[derive(Clone, Debug, PartialEq)]
@@ -21,10 +21,10 @@ enum BufferData {
     Idx(Vec<Idx>),
 }
 
-impl From<Vec<f32>>  for BufferData { fn from(data: Vec<f32> ) -> Self {BufferData::Float(data)}}
-impl From<Vec<u8>>   for BufferData { fn from(data: Vec<u8>  ) -> Self {BufferData::U8   (data)}}
-impl From<Vec<bool>> for BufferData { fn from(data: Vec<bool>) -> Self {BufferData::Bool (data)}}
-impl From<Vec<u16>>  for BufferData { fn from(data: Vec<u16> ) -> Self {BufferData::Idx  (data)}}
+impl From<Vec<f32>>   for BufferData {fn from(data: Vec<f32>  ) -> Self {BufferData::Float(data)}}
+impl From<Vec<u8>>    for BufferData {fn from(data: Vec<u8>   ) -> Self {BufferData::U8   (data)}}
+impl From<Vec<bool>>  for BufferData {fn from(data: Vec<bool> ) -> Self {BufferData::Bool (data)}}
+impl From<Vec<usize>> for BufferData {fn from(data: Vec<usize>) -> Self {BufferData::Idx  (data)}}
 
 #[derive(Clone, Debug, PartialEq)]
 struct Buffer {
@@ -61,7 +61,7 @@ impl Buffer {
     }
 }
 
-fn stack_along(array: Vec<Buffer>, dim: usize) -> Buffer {
+fn stack_along(array: Vec<Buffer>, dim: Idx) -> Buffer {
     {
         if dim > array.len() {
             panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
@@ -179,7 +179,7 @@ fn dump_buffer(buf: &Buffer, filename: &str) -> std::io::Result<()> {
         BufferData::Float(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
         BufferData::U8(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
         BufferData::Bool(data) => data.iter().map(|x| if *x {0x01u8} else {0x00u8}).collect::<Vec<u8>>(),
-        BufferData::Idx(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
+        BufferData::Idx(data) => data.iter().map(|x| x % 0xFFFF).flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
     }.as_slice())?;
     Ok(())
 }
@@ -205,40 +205,77 @@ fn load_buffer(filename: &str) -> std::io::Result<Buffer> {
 type OperatorDimensions = Option<Idx>;
 
 #[derive(Debug)]
-enum BinaryOperatorType {
+enum OperatorType {
     Multiplication,
     Greater,
     Less,
     Minus,
     Plus,
     Stack,
+    Max,
+    Abs,
+    Fract,
 }
 
-impl BinaryOperatorType {
-    // TODO: impl From
-    fn from_str(op: &str) -> Result<BinaryOperatorType, String> {
-        match op {
-            "*" => Ok(BinaryOperatorType::Multiplication),
-            ">" => Ok(BinaryOperatorType::Greater),
-            "<" => Ok(BinaryOperatorType::Less),
-            "-" => Ok(BinaryOperatorType::Minus),
-            "+" => Ok(BinaryOperatorType::Plus),
-            "stack" => Ok(BinaryOperatorType::Stack),
-            _ => Err(format!("binary operator '{}' is not implemented", op)),
+impl OperatorType {
+    fn from_str(s: &str) -> Result<OperatorType, String> {
+        match s {
+            "*"     => Ok(OperatorType::Multiplication),
+            ">"     => Ok(OperatorType::Greater       ),
+            "<"     => Ok(OperatorType::Less          ),
+            "-"     => Ok(OperatorType::Minus         ),
+            "+"     => Ok(OperatorType::Plus          ),
+            "stack" => Ok(OperatorType::Stack         ),
+            "max"   => Ok(OperatorType::Max           ),
+            "abs"   => Ok(OperatorType::Abs           ),
+            "fract" => Ok(OperatorType::Fract         ),
+            _ => Err(format!("operator '{}' is not implemented", s)),
         }
     }
 
     // TODO: impl Debug
     #[allow(dead_code)]
-    fn to_string(&self) -> String {
+    fn to_str(&self) -> String {
         match self {
-            BinaryOperatorType::Multiplication => "*",
-            BinaryOperatorType::Greater => ">",
-            BinaryOperatorType::Less => "<",
-            BinaryOperatorType::Minus => "-",
-            BinaryOperatorType::Plus => "+",
-            BinaryOperatorType::Stack => "stack",
+            OperatorType::Multiplication => "*"    ,
+            OperatorType::Greater        => ">"    ,
+            OperatorType::Less           => "<"    ,
+            OperatorType::Minus          => "-"    ,
+            OperatorType::Plus           => "+"    ,
+            OperatorType::Stack          => "stack",
+            OperatorType::Max            => "max"  ,
+            OperatorType::Abs            => "abs"  ,
+            OperatorType::Fract          => "fract",
         }.to_owned()
+    }
+}
+
+#[derive(Debug)]
+struct Operator {
+    typee: OperatorType,
+    dimensions: OperatorDimensions,
+}
+
+impl Operator {
+    // TODO: impl Parse
+    fn from_str(op: &str) -> Result<Operator, String> {
+        // TODO: multidimensinal operators??
+        let (operator_type, dimensions) = match op.find('#') {
+            Some(i) => (&op[..i], Some(op[i+1..].parse::<Idx>().unwrap())),
+            None => (op, None),
+        };
+        let typee = OperatorType::from_str(operator_type)?;
+        Ok(Operator {typee, dimensions})
+    }
+
+    fn to_str(&self) -> String {
+        format!(
+            "{}{}",
+            self.typee.to_str(),
+            self.dimensions
+                .map(|dims| format!("#{:?}", dims))
+                .unwrap_or("".to_owned()),
+        )
     }
 }
 
@@ -246,13 +283,11 @@ impl BinaryOperatorType {
 #[allow(dead_code)]
 enum Node {
     UnaryOperator {
-        operator: String, // TODO; replace with enum
-        dimensions: OperatorDimensions, // TODO: dimensions should be property of operator
+        operator: Operator,
         argument: Box<Node>,
     },
     BinaryOperator {
-        operator: BinaryOperatorType,
-        dimensions: OperatorDimensions, // TODO: dimensions should be property of operator
+        operator: Operator,
         first_argument: Box<Node>,
         second_argument: Box<Node>,
     },
@@ -263,23 +298,68 @@ impl Node {
     fn eval(&self) -> Buffer {
         match self {
             Node::Buffer(buf) => (**buf).clone(),
-            Node::UnaryOperator {operator, ..} => {
+            Node::UnaryOperator {operator, argument, ..} => {
+                let arg = argument.eval();
+                println!("op={} a=[{:?}]{:?}", operator.to_str(), arg.shape, arg.data);
                 // TODO: implement abs
                 // TODO: implement fract
                 // TODO: implement max#2
-                unimplemented!("Unary operator '{}' is not implemented", operator);
+                match operator.typee {
+                    OperatorType::Max => {
+                        match arg.data {
+                            // max#k :: float[a1,..,ak,..,an] -> float[a1,..,~ak,..,an]
+                            BufferData::Float(d) => {
+                                let dim = operator.dimensions.unwrap();
+                                let mut new_shape = arg.shape.clone();
+                                new_shape.remove(dim);
+                                // TODO: not only dim=2
+                                let shift = arg.shape[0] * arg.shape[1];
+                                println!("shift={}", shift);
+                                let mut new_data = Vec::with_capacity(d.len() / arg.shape[dim]);
+                                for j in 0..shift {
+                                    let mut res = d[j];
+                                    for i in 1..arg.shape[dim] {
+                                        res = res.max(d[j + i * shift]);
+                                    }
+                                    new_data.push(res);
+                                }
+                                Buffer {
+                                    data: BufferData::Float(new_data),
+                                    shape: new_shape,
+                                    name: None,
+                                }
+                            },
+                            _ => unimplemented!(),
+                        }
+                    },
+                    OperatorType::Abs => {
+                        match arg.data {
+                            // abs :: float[*sh] -> float[*sh]
+                            BufferData::Float(d) => {
+                                Buffer {
+                                    data: BufferData::Float(d.into_iter().map(|x| x.abs()).collect()),
+                                    shape: arg.shape,
+                                    name: None,
+                                }
+                            },
+                            _ => unimplemented!(),
+                        }
+                    },
+                    ref t => unimplemented!("Unary operator '{}' is not implemented", t.to_str()),
+                }
             },
             Node::BinaryOperator {operator, first_argument, second_argument, ..} => {
                 let first_buf = first_argument.eval();
                 let second_buf = second_argument.eval();
-                match operator {
-                    BinaryOperatorType::Multiplication => {
+                println!("op={} f=[{:?}]{:?} s=[{:?}]{:?}", operator.to_str(), first_buf.shape, first_buf.data, second_buf.shape, second_buf.data);
+                match operator.typee {
+                    OperatorType::Multiplication => {
                         Buffer {
                             data: match (first_buf.data, second_buf.data) {
                                 // * :: (float, float) -> float
                                 (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(fd
                                     .iter()
-                                    .zip(sd.iter())
+                                    .zip(sd.iter()) // TODO: check validity of zip
                                     .map(|(x, y)| x * y)
                                     .collect()
                                 ),
@@ -296,14 +376,13 @@ impl Node {
                             name: None,
                         }
                     },
-                    BinaryOperatorType::Greater => {
+                    OperatorType::Greater => {
                         Buffer {
                             data: match (first_buf.data, second_buf.data) {
                                 // > :: (float, float) -> bool
-                                (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(fd
-                                    .iter()
-                                    .zip(sd.iter())
-                                    .map(|(x, y)| x > y)
+                                (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(sd
+                                    .into_iter()
+                                    .map(|x| fd[0] > x)
                                     .collect()
                                 ),
                                 // > :: (idx, idx) -> bool
@@ -319,7 +398,7 @@ impl Node {
                             name: None,
                         }
                     },
-                    BinaryOperatorType::Less => {
+                    OperatorType::Less => {
                         Buffer {
                             data: match (first_buf.data, second_buf.data) {
                                 // < :: (float, float) -> bool
@@ -342,7 +421,7 @@ impl Node {
                             name: None,
                         }
                     },
-                    BinaryOperatorType::Minus => {
+                    OperatorType::Minus => {
                         Buffer {
                             data: match (first_buf.data, second_buf.data) {
                                 // - :: (float, float) -> float
@@ -358,7 +437,7 @@ impl Node {
                             name: None,
                         }
                     },
-                    BinaryOperatorType::Plus => {
+                    OperatorType::Plus => {
                         Buffer {
                             data: match (first_buf.data, second_buf.data) {
                                 // * :: (float, float) -> float
@@ -381,9 +460,10 @@ impl Node {
                             name: None,
                         }
                     },
-                    BinaryOperatorType::Stack => {
-                        stack_along(vec![first_buf, second_buf], 0)
-                    }
+                    OperatorType::Stack => {
+                        stack_along(vec![first_buf, second_buf], operator.dimensions.unwrap_or(0))
+                    },
+                    ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
             },
         }
@@ -391,7 +471,7 @@ impl Node {
 
     // TODO: move to Debug implementation
     #[allow(dead_code)]
-    fn to_string(&self) -> String {
+    fn to_str(&self) -> String {
         match self {
             Node::Buffer(buf) => {
                 // shape_str = ",".join(map(str, self.shape))
@@ -399,18 +479,11 @@ impl Node {
                 // TODO: ({name}@)?{T}[{shape}]
                 buf.name.as_ref().unwrap_or(&"no_name".to_owned()).clone()
             },
-            Node::UnaryOperator {operator, dimensions, argument} => {
-                let operator_str = match dimensions {
-                    Some(dims) => format!("{}#{:?}", operator, dims),
-                    None => operator.to_string(),
-                };
-                format!("{} {}", operator_str, argument.to_string())
+            Node::UnaryOperator {operator, argument} => {
+                format!("{} {}", operator.to_str(), argument.to_str())
             },
-            Node::BinaryOperator {operator, dimensions, first_argument, second_argument} => {
-                format!("({}) {} {}", first_argument.to_string(), format!("{}{}", operator.to_string(), match dimensions {
-                    Some(dims) => format!("#{:?}", dims),
-                    None => "".to_owned(),
-                }), second_argument.to_string())
+            Node::BinaryOperator {operator, first_argument, second_argument} => {
+                format!("({}) {} {}", first_argument.to_str(), operator.to_str(), second_argument.to_str())
             },
         }
     }
@@ -433,17 +506,6 @@ impl<'a> TokenStream {
         self.0.last()
     }
 
-    fn parse_operator(&mut self, operator: String) -> (String, Option<String>) {
-        // TODO: multidimensinal operators??
-        if operator.starts_with("max#") {
-            ("max".to_owned(), Some(operator[4..].to_owned()))
-        } else if operator.starts_with("stack#") {
-            ("stack".to_owned(), Some(operator[6..].to_owned()))
-        } else {
-            (operator, None)
-        }
-    }
-
     fn parse_buffer(&mut self) -> Buffer {
         let token = self.next().unwrap();
         if token == "[" { // array
@@ -457,9 +519,21 @@ impl<'a> TokenStream {
             }
             stack_along(array, 0)
         } else { // single item operand
-            fn lookup_buffer(_: String) -> Result<Buffer, String> {
+            fn lookup_buffer(s: String) -> Result<Buffer, String> {
                 // TODO: lookup known/cached buffers first
-                Ok(Buffer::new(BufferType::Float, vec![]))
+                match s.as_str() {
+                    "x" => Ok(Buffer {
+                        data: BufferData::Float(vec![-1., -1., -1., -1., -1., 0., 0., 0., 0., 0., 1.,1.,1.,1.,1.,]),
+                        shape: vec![3, 3],
+                        name: Some(s),
+                    }),
+                    "y" => Ok(Buffer {
+                        data: BufferData::Float(vec![1., 0., -1., 1., 0., -1., 1., 0., -1.]),
+                        shape: vec![3, 3],
+                        name: Some(s),
+                    }),
+                    _ => Err(format!("Buffer '{}' was not found", s))
+                }
             }
             // TODO: regexes
             // TODO: linear/monadic interface
@@ -491,7 +565,7 @@ impl<'a> TokenStream {
                             if token.starts_with("0x") {
                                 Ok(1)
                             } else {
-                                Err("ZHOPA".to_string())
+                                Err(token.clone())
                             }
                             .map(|x| Buffer {
                                 data: BufferData::U8(vec![x]),
@@ -533,15 +607,15 @@ impl<'a> TokenStream {
         // TODO: disallow operator_named identifiers
         #[derive(Debug)]
         enum UnaryOp {
-            UnaryOperator(String),
-            BinaryOperator(String, Node),
+            UnaryOperator(Operator),
+            BinaryOperator(Operator, Node),
         }
         let mut unary_ops_stack = Vec::new();
         let first_argument = loop {
             unary_ops_stack.push(
                 match self.parse_operator_or_operand() {
                     OperatorOrOperand::Operator(op) => {
-                        UnaryOp::UnaryOperator(op)
+                        UnaryOp::UnaryOperator(Operator::from_str(op.as_str()).unwrap())
                     },
                     OperatorOrOperand::Operand(x) => {
                         match self.peek() {
@@ -549,7 +623,7 @@ impl<'a> TokenStream {
                             None => break x,
                             _ => {},
                         }
-                        UnaryOp::BinaryOperator(self.next().unwrap(), x)
+                        UnaryOp::BinaryOperator(Operator::from_str(self.next().unwrap().as_str()).unwrap(), x)
                     },
                 }
             );
@@ -563,22 +637,16 @@ impl<'a> TokenStream {
                 |acc, op| {
                     match op {
                         UnaryOp::UnaryOperator(operator) => {
-                            let (op, dims) = self.parse_operator(operator);
-                            let dims = dims.map(|d| d.parse::<Idx>().unwrap());
                             Node::UnaryOperator {
-                                operator: op,
+                                operator: operator,
                                 argument: Box::new(acc),
-                                dimensions: dims,
                             }
                         },
                         UnaryOp::BinaryOperator(operator, buf) => {
-                            let (op, dims) = self.parse_operator(operator);
-                            let dims = dims.map(|d| d.parse::<Idx>().unwrap());
                             Node::BinaryOperator {
-                                operator: BinaryOperatorType::from_str(op.as_str()).unwrap(),
+                                operator: operator,
                                 first_argument: Box::new(buf),
                                 second_argument: Box::new(acc),
-                                dimensions: dims,
                             }
                         },
                     }
@@ -630,7 +698,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
-    use super::{Node, Buffer, BufferType, BufferData, BinaryOperatorType};
+    use super::{Node, Buffer, BufferType, BufferData, Operator, OperatorType};
 
     #[test]
     fn string_to_expression() {
@@ -638,7 +706,7 @@ mod tests {
             "(.4 > max#2 abs (x stack#2 y) - [.5 .5]) * 7. * fract x + y"
                 .parse::<Node>()
                 .unwrap()
-                .to_string(),
+                .to_str(),
             "((.4) > max#2 abs ((x) stack#2 y) - no_name) * (7.) * fract (x) + y",
         );
     }
@@ -649,7 +717,7 @@ mod tests {
             "(.4 > (x stack#2 y) - [.5 .5])"
                 .parse::<Node>()
                 .unwrap()
-                .to_string(),
+                .to_str(),
             "(.4) > ((x) stack#2 y) - no_name",
         );
     }
@@ -658,59 +726,50 @@ mod tests {
     fn expression_to_string() {
         let x_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*x.shape*/).name("x".to_owned()));
         assert_eq!(
-            Node::Buffer(x_buffer.clone()).to_string(),
+            Node::Buffer(x_buffer.clone()).to_str(),
             "x".to_owned(),
         );
         let y_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*y.shape*/).name("y".to_owned()));
         assert_eq!(
-            Node::Buffer(y_buffer.clone()).to_string(),
+            Node::Buffer(y_buffer.clone()).to_str(),
             "y".to_owned(),
         );
         let test_expr = Node::BinaryOperator {
-            operator: BinaryOperatorType::Multiplication,
+            operator: Operator {typee: OperatorType::Multiplication, dimensions: None},
             first_argument: Box::new(Node::BinaryOperator {
-                operator: BinaryOperatorType::Less,
+                operator: Operator {typee: OperatorType::Less, dimensions: None},
                 first_argument: Box::new(Node::UnaryOperator {
-                    operator: "max".to_owned(),
+                    operator: Operator {typee: OperatorType::Max, dimensions: Some(2)},
                     argument: Box::new(Node::UnaryOperator {
-                        operator: "abs".to_owned(),
+                        operator: Operator {typee: OperatorType::Abs, dimensions: None},
                         argument: Box::new(Node::BinaryOperator {
-                            operator: BinaryOperatorType::Minus,
+                            operator: Operator {typee: OperatorType::Minus, dimensions: None},
                             first_argument: Box::new(Node::BinaryOperator {
-                                operator: BinaryOperatorType::Stack,
+                                operator: Operator {typee: OperatorType::Stack, dimensions: Some(2)},
                                 first_argument: Box::new(Node::Buffer(x_buffer.clone())),
                                 second_argument: Box::new(Node::Buffer(y_buffer.clone())),
-                                dimensions: Some(2),
                             }),
                             second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![2]).name("[0.5 0.5]".to_owned())))),
-                            dimensions: None,
                         }),
-                        dimensions: None,
                     }),
-                    dimensions: Some(2),
                 }),
                 second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("0.4".to_owned())))),
-                dimensions: None,
             }),
             second_argument: Box::new(Node::UnaryOperator {
-                operator: "fract".to_owned(),
+                operator: Operator {typee: OperatorType::Fract, dimensions: None},
                 argument: Box::new(Node::BinaryOperator {
-                    operator: BinaryOperatorType::Multiplication,
+                    operator: Operator {typee: OperatorType::Multiplication, dimensions: None},
                     first_argument: Box::new(Node::BinaryOperator {
-                        operator: BinaryOperatorType::Plus,
+                        operator: Operator {typee: OperatorType::Plus, dimensions: None},
                         first_argument: Box::new(Node::Buffer(x_buffer.clone())),
                         second_argument: Box::new(Node::Buffer(y_buffer.clone())),
-                        dimensions: None,
                     }),
                     second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("7".to_owned())))),
-                    dimensions: None,
                 }),
-                dimensions: None,
             }),
-            dimensions: None,
         };
         assert_eq!(
-            test_expr.to_string(),
+            test_expr.to_str(),
             "((max#2 abs ((x) stack#2 y) - [0.5 0.5]) < 0.4) * fract ((x) + y) * 7".to_owned(),
         );
     }
