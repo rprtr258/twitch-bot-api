@@ -1,7 +1,6 @@
 use std::{
     env::args,
     io::Write,
-    ops::Deref,
     process::exit,
     rc::Rc,
 };
@@ -11,196 +10,188 @@ use {
 };
 
 type Idx = usize;
+type Shape = Vec<Idx>;
+
+trait Buffer<T> {
+    fn get(&self, i: Idx) -> T;
+    fn iter<I>(&self) -> I where I: Iterator<Item=T>;
+    fn dim(&self, i: Idx) -> Idx;
+    fn rank(&self) -> Idx;
+    fn shape(&self) -> Vec<Idx> {
+        (0..self.rank())
+            .map(|i| self.dim(i))
+            .collect()
+    }
+}
+
+enum FloatBuffer {
+    Materialized(Shape, Vec<f32>),
+    Stacked(Shape, Idx, Vec<Box<FloatBuffer>>),
+}
+
+enum FloatBufferIter<'a> {
+    Materialized(&'a Vec<f32>),
+    Stacked(&'a Shape, Idx, &'a Vec<Box<FloatBuffer>>),
+}
+
+impl Buffer<f32> for FloatBuffer {
+    fn get(&self, i: Idx) -> f32 {
+        match self {
+            FloatBuffer::Materialized(_, data) => data[i],
+            _ => unimplemented!(),
+        }
+    }
+
+    fn iter<FloatBufferIter>(&self) -> FloatBufferIter {
+        match self {
+            FloatBuffer::Materialized(_, data) => FloatBufferIter<'_>::Materialized(&data),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn dim(&self, i: Idx) -> Idx {
+        match self {
+            FloatBuffer::Materialized(shape, _) => shape[i],
+            FloatBuffer::Stacked(shape, dim, data) => if i < *dim {shape[i]} else if i == *dim {data.len()} else {shape[i - 1]},
+            _ => unimplemented!(),
+        }
+    }
+
+    fn rank(&self) -> Idx {
+        match self {
+            FloatBuffer::Materialized(shape, _) => shape.len(),
+            FloatBuffer::Stacked(shape, _, _) => shape.len() + 1,
+            _ => unimplemented!(),
+        }
+    }
+}
+
+enum U8Buffer {
+    Materialized(Shape, Vec<u8>),
+}
+
+enum BoolBuffer {
+    Materialized(Shape, Vec<bool>),
+}
+
+enum IdxBuffer {
+    Materialized(Shape, Vec<Idx>),
+}
 
 // TODO: change to generics?
 #[derive(Clone, Debug, PartialEq)]
 enum BufferData {
-    Float(Vec<f32>),
-    U8(Vec<u8>),
-    Bool(Vec<bool>),
-    Idx(Vec<Idx>),
+    Float(FloatBuffer),
+    U8   (U8Buffer),
+    Bool (BoolBuffer),
+    Idx  (IdxBuffer),
 }
 
-impl From<Vec<f32>>   for BufferData {fn from(data: Vec<f32>  ) -> Self {BufferData::Float(data)}}
-impl From<Vec<u8>>    for BufferData {fn from(data: Vec<u8>   ) -> Self {BufferData::U8   (data)}}
-impl From<Vec<bool>>  for BufferData {fn from(data: Vec<bool> ) -> Self {BufferData::Bool (data)}}
-impl From<Vec<usize>> for BufferData {fn from(data: Vec<usize>) -> Self {BufferData::Idx  (data)}}
-
-#[derive(Clone, Debug, PartialEq)]
-struct Buffer {
-    shape: Vec<Idx>,
-    name: Option<String>,
-    data: BufferData,
-}
-
-#[allow(dead_code)]
-enum BufferType {
-    Float,
-    U8,
-    Bool,
-    Idx,
-}
-
-impl Buffer {
-    fn new(typee: BufferType, shape: Vec<Idx>) -> Self {
-        Buffer {
-            shape,
-            data: match typee {
-                BufferType::Float => BufferData::Float(Vec::new()),
-                BufferType::U8 => BufferData::U8(Vec::new()),
-                BufferType::Bool => BufferData::Bool(Vec::new()),
-                BufferType::Idx => BufferData::Idx(Vec::new()),
-            },
-            name: None,
+impl BufferData {
+    fn dim(&self, i: Idx) -> Idx {
+        match self {
+            BufferData::Float(buf) => buf.dim(i),
+            _ => unimplemented!(),
         }
     }
 
-    fn name(mut self, name: String) -> Self {
-        self.name = Some(name);
-        return self
+    fn rank(&self) -> Idx {
+        match self {
+            BufferData::Float(buf) => buf.rank(),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn shape(&self) -> Vec<Idx> {
+        (0..self.rank())
+            .map(|i| self.dim(i))
+            .collect()
     }
 }
 
-fn stack_along(array: Vec<Buffer>, dim: Idx) -> Buffer {
+impl From<Vec<f32>>   for BufferData {fn from(data: Vec<f32>  ) -> Self {BufferData::Float(FloatBuffer::Materialized(vec![data.len()], data))}}
+impl From<Vec<u8>>    for BufferData {fn from(data: Vec<u8>   ) -> Self {BufferData::U8   (   U8Buffer::Materialized(vec![data.len()], data))}}
+impl From<Vec<bool>>  for BufferData {fn from(data: Vec<bool> ) -> Self {BufferData::Bool ( BoolBuffer::Materialized(vec![data.len()], data))}}
+impl From<Vec<usize>> for BufferData {fn from(data: Vec<usize>) -> Self {BufferData::Idx  (  IdxBuffer::Materialized(vec![data.len()], data))}}
+
+// TODO: stack not only along 0
+fn stack_along(array: Vec<BufferData>, dim: Idx) -> BufferData {
     {
         if dim > array.len() {
             panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
         }
         let first_item = &array[0];
-        if !array.iter().skip(1).all(|buf| match (&first_item.data, &buf.data) {
+        if !array.iter().skip(1).all(|buf| match (&first_item, &buf) {
             (BufferData::Float(_), BufferData::Float(_)) => true,
             (BufferData::U8(_), BufferData::U8(_)) => true,
             (BufferData::Bool(_), BufferData::Bool(_)) => true,
             (BufferData::Idx(_), BufferData::Idx(_)) => true,
             _ => false,
-        } && first_item.shape == buf.shape) {
+        } && first_item.shape() == buf.shape()) {
             panic!("all items must have the same type and shape");
         }
     }
-    let mut resulting_shape = Vec::with_capacity(array.len() + 1);
-    let (mut shapes, datas): (Vec<Vec<Idx>>, Vec<BufferData>) = array
-        .into_iter()
-        .map(|Buffer {shape, data, ..}| (shape, data))
-        .unzip();
-    let dim_along = shapes.len().try_into().unwrap();
-    let stack_dim = shapes.remove(shapes.len() - 1);
-    for x in stack_dim.iter().take(dim) {
-        resulting_shape.push(*x);
-    }
-    resulting_shape.push(dim_along);
-    for x in stack_dim.iter().skip(dim) {
-        resulting_shape.push(*x);
-    }
-    // stack them along 0
-    // TODO: stack not only along 0
-    Buffer {
-        shape: resulting_shape,
-        data: match datas[0] {
-            BufferData::Float(_) => {
-                datas
+    let unstacked_shape = array[0].shape();
+    match array[0] {
+        BufferData::Float(_) => BufferData::Float(FloatBuffer::Stacked(
+                unstacked_shape,
+                dim,
+                array
                     .into_iter()
-                    .flat_map(|elem| {
-                        match elem {
-                            BufferData::Float(elem_data) => elem_data,
-                            _ => unreachable!(),
-                        }
+                    .map(|buf| match buf {
+                        BufferData::Float(float_buf) => Box::new(float_buf),
+                        _ => unreachable!(),
                     })
-                    .collect::<Vec<f32>>()
-                    .into()
-            },
-            BufferData::U8(_) => {
-                datas
-                    .into_iter()
-                    .flat_map(|elem| {
-                        match elem {
-                            BufferData::U8(elem_data) => elem_data,
-                            _ => unreachable!(),
-                        }
-                    })
-                    .collect::<Vec<u8>>()
-                    .into()
-            },
-            BufferData::Bool(_) => {
-                datas
-                    .into_iter()
-                    .flat_map(|elem| {
-                        match elem {
-                            BufferData::Bool(elem_data) => elem_data,
-                            _ => unreachable!(),
-                        }
-                    })
-                    .collect::<Vec<bool>>()
-                    .into()
-            },
-            BufferData::Idx(_) => {
-                datas
-                    .into_iter()
-                    .flat_map(|elem| {
-                        match elem {
-                            BufferData::Idx(elem_data) => elem_data,
-                            _ => unreachable!(),
-                        }
-                    })
-                    .collect::<Vec<Idx>>()
-                    .into()
-            },
-        },
-        name: None,
+                    .collect()
+        )),
+        _ => unimplemented!(),
     }
 }
 
-impl Deref for Buffer {
-    type Target = BufferData;
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-fn dump_buffer(buf: &Buffer, filename: &str) -> std::io::Result<()> {
+fn dump_buffer(buf: &BufferData, filename: &str) -> std::io::Result<()> {
     // TODO: reset file content
     let mut file = std::fs::File::options()
         .create(true)
         .write(true)
         .open(filename)?;
     // type
-    file.write(match buf.data {
+    file.write(match buf {
         BufferData::Float(_) => &[0x00],
         BufferData::U8(_) => &[0x01],
         BufferData::Bool(_) => &[0x02],
         BufferData::Idx(_) => &[0x03],
     })?;
     // shape length
-    file.write(&[buf.shape.len().try_into().unwrap()])?;
+    file.write(&[buf.rank().try_into().unwrap()])?;
     // shape
-    file.write(&buf.shape.iter().map(|x| (*x).try_into().unwrap()).collect::<Vec<u8>>().as_slice())?;
+    file.write(&buf.shape().iter().map(|x| (*x).try_into().unwrap()).collect::<Vec<u8>>().as_slice())?;
     // data
-    println!("{:?}", buf.data);
-    file.write(&match &buf.data {
+    println!("{:?}", buf);
+    file.write(&match &buf {
         BufferData::Float(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
-        BufferData::U8(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
-        BufferData::Bool(data) => data.iter().map(|x| if *x {0x01u8} else {0x00u8}).collect::<Vec<u8>>(),
-        BufferData::Idx(data) => data.iter().map(|x| x % 0xFFFF).flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
+        _ => unimplemented!(),
+        // BufferData::U8(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
+        // BufferData::Bool(data) => data.iter().map(|x| if *x {0x01u8} else {0x00u8}).collect::<Vec<u8>>(),
+        // BufferData::Idx(data) => data.iter().map(|x| x % 0xFFFF).flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
     }.as_slice())?;
     Ok(())
 }
 
-#[allow(dead_code, unused_variables, unused_mut)]
-fn load_buffer(filename: &str) -> std::io::Result<Buffer> {
-    let mut file = std::fs::File::open(filename)?;
-    //let mut buf = Vec::with_capacity(file.size());
-    //file.read(&buf);
-    //let shape_len = buf[1];
-    //let shape = buf
-    //let data = match buf[0] {
-    //    0x00 => BufferData::Float(),
-    //}
-    //Ok(Buffer {
-    //    shape,
-    //    data,
-    //    name: filename,
-    //})
-    unimplemented!()
-}
+//fn load_buffer(filename: &str) -> std::io::Result<Buffer> {
+//    let mut file = std::fs::File::open(filename)?;
+//    //let mut buf = Vec::with_capacity(file.size());
+//    //file.read(&buf);
+//    //let shape_len = buf[1];
+//    //let shape = buf
+//    //let data = match buf[0] {
+//    //    0x00 => BufferData::Float(),
+//    //}
+//    //Ok(Buffer {
+//    //    shape,
+//    //    data,
+//    //})
+//    unimplemented!()
+//}
 
 type OperatorDimensions = Option<Idx>;
 
@@ -291,11 +282,11 @@ enum Node {
         first_argument: Box<Node>,
         second_argument: Box<Node>,
     },
-    Buffer(Rc<Buffer>),
+    Buffer(Rc<BufferData>),
 }
 
 impl Node {
-    fn eval(&self) -> Buffer {
+    fn eval(&self) -> BufferData {
         match self {
             Node::Buffer(buf) => (**buf).clone(),
             Node::UnaryOperator {operator, argument, ..} => {
@@ -323,11 +314,7 @@ impl Node {
                                     }
                                     new_data.push(res);
                                 }
-                                Buffer {
-                                    data: BufferData::Float(new_data),
-                                    shape: new_shape,
-                                    name: None,
-                                }
+                                BufferData::Float(FloatBuffer::Materialized(new_shape, new_data))
                             },
                             _ => unimplemented!(),
                         }
@@ -335,13 +322,7 @@ impl Node {
                     OperatorType::Abs => {
                         match arg.data {
                             // abs :: float[*sh] -> float[*sh]
-                            BufferData::Float(d) => {
-                                Buffer {
-                                    data: BufferData::Float(d.into_iter().map(|x| x.abs()).collect()),
-                                    shape: arg.shape,
-                                    name: None,
-                                }
-                            },
+                            BufferData::Float(d) => BufferData::Float(FloatBuffer::Materialized(arg.shape, d.into_iter().map(|x| x.abs()).collect())),
                             _ => unimplemented!(),
                         }
                     },
@@ -353,112 +334,64 @@ impl Node {
                 let second_buf = second_argument.eval();
                 println!("op={} f=[{:?}]{:?} s=[{:?}]{:?}", operator.to_str(), first_buf.shape, first_buf.data, second_buf.shape, second_buf.data);
                 match operator.typee {
-                    OperatorType::Multiplication => {
-                        Buffer {
-                            data: match (first_buf.data, second_buf.data) {
-                                // * :: (float, float) -> float
-                                (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(fd
+                    OperatorType::Multiplication => match (first_buf.data, second_buf.data) {
+                        // * :: (float, float) -> float
+                        (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(FloatBuffer::Materialized(
+                                first_buf.shape,
+                                fd
                                     .iter()
                                     .zip(sd.iter()) // TODO: check validity of zip
                                     .map(|(x, y)| x * y)
                                     .collect()
-                                ),
-                                // * :: (idx, idx) -> idx
-                                (BufferData::Idx(fd), BufferData::Idx(sd)) => BufferData::Idx(fd
-                                    .iter()
-                                    .zip(sd.iter())
-                                    .map(|(x, y)| x * y)
-                                    .collect()
-                                ),
-                                _ => unimplemented!(),
-                            },
-                            shape: first_buf.shape,
-                            name: None,
-                        }
+                        )),
+                        _ => unimplemented!(),
                     },
-                    OperatorType::Greater => {
-                        Buffer {
-                            data: match (first_buf.data, second_buf.data) {
-                                // > :: (float, float) -> bool
-                                (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(sd
-                                    .into_iter()
-                                    .map(|x| fd[0] > x)
-                                    .collect()
-                                ),
-                                // > :: (idx, idx) -> bool
-                                (BufferData::Idx(fd), BufferData::Idx(sd)) => BufferData::Bool(fd
+                    OperatorType::Greater => match (first_buf.data, second_buf.data) {
+                        // > :: (float, float) -> bool
+                        (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(FloatBuffer::Materialized(
+                                first_buf.shape,
+                                fd
                                     .iter()
-                                    .zip(sd.iter())
+                                    .zip(sd.iter()) // TODO: check validity of zip
                                     .map(|(x, y)| x > y)
                                     .collect()
-                                ),
-                                _ => unimplemented!(),
-                            },
-                            shape: first_buf.shape,
-                            name: None,
-                        }
+                        )),
+                        _ => unimplemented!(),
                     },
-                    OperatorType::Less => {
-                        Buffer {
-                            data: match (first_buf.data, second_buf.data) {
-                                // < :: (float, float) -> bool
-                                (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(fd
+                    OperatorType::Less => match (first_buf.data, second_buf.data) {
+                        // < :: (float, float) -> bool
+                        (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(FloatBuffer::Materialized(
+                                fd.shape,
+                                fd
                                     .iter()
-                                    .zip(sd.iter())
+                                    .zip(sd.iter()) // TODO: check validity of zip
                                     .map(|(x, y)| x < y)
                                     .collect()
-                                ),
-                                // < :: (idx, idx) -> bool
-                                (BufferData::Idx(fd), BufferData::Idx(sd)) => BufferData::Bool(fd
-                                    .iter()
-                                    .zip(sd.iter())
-                                    .map(|(x, y)| x < y)
-                                    .collect()
-                                ),
-                                _ => unimplemented!(),
-                            },
-                            shape: first_buf.shape,
-                            name: None,
-                        }
+                        )),
+                        _ => unimplemented!(),
                     },
-                    OperatorType::Minus => {
-                        Buffer {
-                            data: match (first_buf.data, second_buf.data) {
-                                // - :: (float, float) -> float
-                                (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(fd
-                                    .iter()
-                                    .zip(sd.iter())
-                                    .map(|(x, y)| x - y)
-                                    .collect()
-                                ),
-                                _ => unimplemented!(),
-                            },
-                            shape: first_buf.shape,
-                            name: None,
-                        }
+                    OperatorType::Minus => match (first_buf.data, second_buf.data) {
+                        // - :: (float, float) -> float
+                        (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(FloatBuffer::Materialized(
+                            first_buf.shape,
+                            fd
+                                .iter()
+                                .zip(sd.iter())
+                                .map(|(x, y)| x - y)
+                                .collect()
+                        )),
+                        _ => unimplemented!(),
                     },
-                    OperatorType::Plus => {
-                        Buffer {
-                            data: match (first_buf.data, second_buf.data) {
-                                // * :: (float, float) -> float
-                                (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(fd
-                                    .iter()
-                                    .zip(sd.iter())
-                                    .map(|(x, y)| x + y)
-                                    .collect()
-                                ),
-                                // * :: (idx, idx) -> idx
-                                (BufferData::Idx(fd), BufferData::Idx(sd)) => BufferData::Idx(fd
-                                    .iter()
-                                    .zip(sd.iter())
-                                    .map(|(x, y)| x + y)
-                                    .collect()
-                                ),
-                                _ => unimplemented!(),
-                            },
-                            shape: first_buf.shape,
-                            name: None,
-                        }
+                    OperatorType::Plus => match (first_buf.data, second_buf.data) {
+                        // + :: (float, float) -> float
+                        (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(FloatBuffer::Materialized(
+                            first_buf.shape,
+                            fd
+                                .iter()
+                                .zip(sd.iter())
+                                .map(|(x, y)| x + y)
+                                .collect()
+                        )),
                     },
                     OperatorType::Stack => {
                         stack_along(vec![first_buf, second_buf], operator.dimensions.unwrap_or(0))
@@ -477,7 +410,7 @@ impl Node {
                 // shape_str = ",".join(map(str, self.shape))
                 // type_str = self.type.name
                 // TODO: ({name}@)?{T}[{shape}]
-                buf.name.as_ref().unwrap_or(&"no_name".to_owned()).clone()
+                "no_name".to_owned()
             },
             Node::UnaryOperator {operator, argument} => {
                 format!("{} {}", operator.to_str(), argument.to_str())
@@ -506,7 +439,7 @@ impl<'a> TokenStream {
         self.0.last()
     }
 
-    fn parse_buffer(&mut self) -> Buffer {
+    fn parse_buffer(&mut self) -> BufferData {
         let token = self.next().unwrap();
         if token == "[" { // array
             let mut array = Vec::new();
@@ -519,66 +452,35 @@ impl<'a> TokenStream {
             }
             stack_along(array, 0)
         } else { // single item operand
-            fn lookup_buffer(s: String) -> Result<Buffer, String> {
+            fn lookup_buffer(s: String) -> Result<BufferData, String> {
                 // TODO: lookup known/cached buffers first
                 match s.as_str() {
-                    "x" => Ok(Buffer {
-                        data: BufferData::Float(vec![-1., -1., -1., -1., -1., 0., 0., 0., 0., 0., 1.,1.,1.,1.,1.,]),
-                        shape: vec![3, 3],
-                        name: Some(s),
-                    }),
-                    "y" => Ok(Buffer {
-                        data: BufferData::Float(vec![1., 0., -1., 1., 0., -1., 1., 0., -1.]),
-                        shape: vec![3, 3],
-                        name: Some(s),
-                    }),
+                    "x" => Ok(BufferData::Float(FloatBuffer::Materialized(
+                        vec![3, 3],
+                        BufferData::Float(vec![-1., -1., -1., -1., -1., 0., 0., 0., 0., 0., 1.,1.,1.,1.,1.,]),
+                    ))),
+                    "y" => Ok(BufferData::Float(FloatBuffer::Materialized(
+                        vec![3, 3],
+                        BufferData::Float(vec![1., 0., -1., 1., 0., -1., 1., 0., -1.]),
+                    ))),
                     _ => Err(format!("Buffer '{}' was not found", s))
                 }
             }
             // TODO: regexes
             // TODO: linear/monadic interface
-            token
-                .parse::<bool>()
-                .map(|x| Buffer {
-                    data: BufferData::Bool(vec![x]),
-                    shape: vec![],
-                    name: None,
-                })
-                .map_err(|e| e.to_string())
-                .or_else(|_| token
-                    .parse::<Idx>()
-                    .map(|x| Buffer {
-                        data: BufferData::Idx(vec![x]),
-                        shape: vec![],
-                        name: None,
-                    })
-                    .map_err(|e| e.to_string())
-                    .or_else(|_| token
-                        .parse::<f32>()
-                        .map(|x| Buffer {
-                            data: BufferData::Float(vec![x]),
-                            shape: vec![],
-                            name: None,
-                        })
-                        .map_err(|e| e.to_string())
-                        .or_else(|_|
-                            if token.starts_with("0x") {
-                                Ok(1)
-                            } else {
-                                Err(token.clone())
-                            }
-                            .map(|x| Buffer {
-                                data: BufferData::U8(vec![x]),
-                                shape: vec![],
-                                name: None,
-                            })
-                            .map_err(|e| e.to_string())
-                            .or_else(lookup_buffer)
-                        )
-                    )
-                )
-                .unwrap()
-                .name(token.clone())
+            // TODO: compile regex compile-time
+            // TODO: assure every character of string is parsed
+            lazy_static! {
+                static ref re_float: Regex = Regex::new(r#"(\d*\.\d*)"#).unwrap();
+                static ref re_u8: Regex = Regex::new(r#"0x([0-9A-F]{2})"#).unwrap();
+                static ref re_idx: Regex = Regex::new(r#"(\d{,4})"#).unwrap();
+                static ref re_bool: Regex = Regex::new(r#"(true|false)"#).unwrap();
+            }
+            if re_float.is_match(token) {
+                BufferData::Float(FloatBuffer::Materialized(vec![], re_float.captures_iter(token).take(1).collect()[0].parse()))
+            } else {
+                lookup_buffer(token)
+            }
         }
     }
 
@@ -698,7 +600,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
-    use super::{Node, Buffer, BufferType, BufferData, Operator, OperatorType};
+    use super::{Node, BufferData, Operator, OperatorType, FloatBuffer};
 
     #[test]
     fn string_to_expression() {
@@ -707,7 +609,7 @@ mod tests {
                 .parse::<Node>()
                 .unwrap()
                 .to_str(),
-            "((.4) > max#2 abs ((x) stack#2 y) - no_name) * (7.) * fract (x) + y",
+            "((.4) > max#2 abs ((no_name) stack#2 no_name) - no_name) * (7.) * fract (x) + y",
         );
     }
 
@@ -724,16 +626,8 @@ mod tests {
 
     #[test]
     fn expression_to_string() {
-        let x_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*x.shape*/).name("x".to_owned()));
-        assert_eq!(
-            Node::Buffer(x_buffer.clone()).to_str(),
-            "x".to_owned(),
-        );
-        let y_buffer = Rc::new(Buffer::new(BufferType::Float, vec![]/*y.shape*/).name("y".to_owned()));
-        assert_eq!(
-            Node::Buffer(y_buffer.clone()).to_str(),
-            "y".to_owned(),
-        );
+        let x_buffer = Rc::new(BufferData::Float(FloatBuffer::Materialized(vec![]/*x.shape*/, vec![])));
+        let y_buffer = Rc::new(BufferData::Float(FloatBuffer::Materialized(vec![]/*y.shape*/, vec![])));
         let test_expr = Node::BinaryOperator {
             operator: Operator {typee: OperatorType::Multiplication, dimensions: None},
             first_argument: Box::new(Node::BinaryOperator {
@@ -749,11 +643,11 @@ mod tests {
                                 first_argument: Box::new(Node::Buffer(x_buffer.clone())),
                                 second_argument: Box::new(Node::Buffer(y_buffer.clone())),
                             }),
-                            second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![2]).name("[0.5 0.5]".to_owned())))),
+                            second_argument: Box::new(Node::Buffer(Rc::new(BufferData::Float(FloatBuffer::Materialize(vec![2], vec![0.5, 0.5]))))),
                         }),
                     }),
                 }),
-                second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("0.4".to_owned())))),
+                second_argument: Box::new(Node::Buffer(Rc::new(BufferData::Float(FloatBuffer::Materialize(vec![], vec![0.4]))))),
             }),
             second_argument: Box::new(Node::UnaryOperator {
                 operator: Operator {typee: OperatorType::Fract, dimensions: None},
@@ -764,7 +658,7 @@ mod tests {
                         first_argument: Box::new(Node::Buffer(x_buffer.clone())),
                         second_argument: Box::new(Node::Buffer(y_buffer.clone())),
                     }),
-                    second_argument: Box::new(Node::Buffer(Rc::new(Buffer::new(BufferType::Float, vec![1]).name("7".to_owned())))),
+                    second_argument: Box::new(Node::Buffer(Rc::new(BufferData::Float(FloatBuffer::Materialize(vec![], vec![7.]))))),
                 }),
             }),
         };
@@ -778,11 +672,10 @@ mod tests {
     fn adamar_product() {
         assert_eq!(
             "([[1 2][3 4]] * [[1 2][3 4]])".parse::<Node>().unwrap().eval(),
-            Buffer {
-                shape: vec![2, 2],
-                data: BufferData::Idx(vec![1, 4, 9, 16]),
-                name: None,
-            },
+            BufferData::Float(FloatBuffer::Materialized(
+                vec![2, 2],
+                vec![1, 4, 9, 16],
+            )),
         );
     }
 
@@ -790,11 +683,10 @@ mod tests {
     fn test_eval_4() {
         assert_eq!(
             "2*2".parse::<Node>().unwrap().eval(),
-            Buffer {
-                shape: vec![],
-                data: BufferData::Idx(vec![4]),
-                name: None,
-            },
+            BufferData::Float(FloatBuffer::Materialized(
+                vec![],
+                vec![4],
+            )),
         );
     }
 
@@ -802,11 +694,10 @@ mod tests {
     fn test_eval_6() {
         assert_eq!(
             "2+2*2".parse::<Node>().unwrap().eval(),
-            Buffer {
-                shape: vec![],
-                data: BufferData::Idx(vec![6]),
-                name: None,
-            },
+            BufferData::Float(FloatBuffer::Materialized(
+                vec![],
+                vec![6],
+            )),
         );
     }
 
@@ -814,11 +705,10 @@ mod tests {
     fn test_eval_8() {
         assert_eq!(
             "2*2+2".parse::<Node>().unwrap().eval(),
-            Buffer {
-                shape: vec![],
-                data: BufferData::Idx(vec![8]),
-                name: None,
-            },
+            BufferData::Float(FloatBuffer::Materialized(
+                vec![],
+                vec![8],
+            )),
         );
     }
 }
