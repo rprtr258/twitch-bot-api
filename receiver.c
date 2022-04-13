@@ -72,7 +72,6 @@ i32 main(i32 argc, char** argv) {
                 // 2 is ':' in the beginning plus "\r" in the end
                 write_buffer(STDOUT_FILENO, &buffer, second_colon_position + 1, last_position - second_colon_position - 2);
                 send_newline(STDOUT_FILENO);
-                fflush(stdout);
                 // remove line read from buffer
                 usize bytes_processed = last_position + 1;
                 buffer_pop(&buffer, bytes_processed);
