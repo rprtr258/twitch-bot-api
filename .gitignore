@@ -18,3 +18,8 @@ buffers/target
 run_balancer
 receiver
 sender
+
+# scripts
+*.sh
+
+buffers/test.buf
