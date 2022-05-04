@@ -9,15 +9,6 @@ use {
     tch::Tensor,
 };
 
-fn lookup_buffer(s: &str) -> Result<Tensor, String> {
-    // TODO: lookup known/cached buffers first
-    match s {
-        "x" => Ok(Tensor::of_slice(&[-1., -1., -1., 0., 0., 0., 1., 1., 1.]).reshape(&[3, 3])),
-        "y" => Ok(Tensor::of_slice(&[1., 0., -1., 1., 0., -1., 1., 0., -1.]).reshape(&[3, 3])),
-        _ => Err(format!("Buffer '{}' was not found", s))
-    }
-}
-
 #[derive(Debug)]
 enum Buffer {
     Named(String),
@@ -33,8 +24,61 @@ enum Buffer {
 //     }
 // }
 
+fn lookup_buffer(s: &str) -> Result<Tensor, String> {
+    // TODO: lookup known/cached buffers first
+    match s {
+        "x" => Ok(Tensor::of_slice(&[
+            -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
+            -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9, -0.9,
+            -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8, -0.8,
+            -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7, -0.7,
+            -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6, -0.6,
+            -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5,
+            -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4, -0.4,
+            -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3,
+            -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2,
+            -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1,
+             0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+             0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,  0.1,
+             0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,  0.2,
+             0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,  0.3,
+             0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,  0.4,
+             0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,
+             0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,  0.6,
+             0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,  0.7,
+             0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,  0.8,
+             0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,  0.9,
+             1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,
+        ]).reshape(&[21, 21])),
+        "y" => Ok(Tensor::of_slice(&[
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+            -1.0, -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+        ]).reshape(&[21, 21])),
+        _ => Err(format!("Buffer '{}' was not found", s))
+    }
+}
+
 // TODO: stack along -0.5, 0, 0.5, 1, ..., n-0.5, n, n+0.5
-// fn stack_along(array: &Tensor[], dim: Idx) -> Buffer {
+fn stack_along(array: &[Tensor], dim: usize) -> Tensor {
     // {
     //     if dim > array.len() {
     //         panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
@@ -50,7 +94,7 @@ enum Buffer {
     //         panic!("all items must have the same type and shape");
     //     }
     // }
-    // Buffer::Literal(Tensor::stack(&array[..], dim))
+    Tensor::stack(&array[..], dim.try_into().unwrap())
     // let unstacked_shape = array[0].shape();
     // match array[0] {
     //     BufferData::Float(_) => BufferData::Float(FloatBuffer::Stacked(
@@ -66,7 +110,7 @@ enum Buffer {
     //     )),
     //     _ => unimplemented!(),
     // }
-// }
+}
 
 // fn dump_buffer(buf: &Buffer, filename: &str) -> std::io::Result<()> {
 //     // TODO: reset file content
@@ -122,6 +166,7 @@ enum OperatorType {
     Less,
     Minus,
     Plus,
+    Divide,
     Stack,
     Max,
     Abs,
@@ -131,11 +176,12 @@ enum OperatorType {
 impl OperatorType {
     fn from_str(s: &str) -> Result<OperatorType, String> {
         match s {
-            "*"     => Ok(OperatorType::Multiplication),
             ">"     => Ok(OperatorType::Greater       ),
             "<"     => Ok(OperatorType::Less          ),
             "-"     => Ok(OperatorType::Minus         ),
             "+"     => Ok(OperatorType::Plus          ),
+            "*"     => Ok(OperatorType::Multiplication),
+            "/"     => Ok(OperatorType::Divide        ),
             "stack" => Ok(OperatorType::Stack         ),
             "max"   => Ok(OperatorType::Max           ),
             "abs"   => Ok(OperatorType::Abs           ),
@@ -148,11 +194,12 @@ impl OperatorType {
     #[allow(dead_code)]
     fn to_str(&self) -> String {
         match self {
-            OperatorType::Multiplication => "*"    ,
             OperatorType::Greater        => ">"    ,
             OperatorType::Less           => "<"    ,
             OperatorType::Minus          => "-"    ,
             OperatorType::Plus           => "+"    ,
+            OperatorType::Multiplication => "*"    ,
+            OperatorType::Divide         => "/",
             OperatorType::Stack          => "stack",
             OperatorType::Max            => "max"  ,
             OperatorType::Abs            => "abs"  ,
@@ -215,22 +262,16 @@ impl Node {
             Node::UnaryOperator {operator, argument, ..} => {
                 let arg = argument.eval();
                 // println!("op={} a=[{:?}]{:?}", operator.to_str(), arg.shape(), arg);
-                // TODO: implement abs
-                // TODO: implement fract
-                // TODO: implement max#2
                 match operator.typee {
                     // max#k :: float[a1,..,ak,..,an] -> float[a1,..,~ak,..,an]
                     OperatorType::Max => match operator.dimensions {
                         None => arg.max(),
                         Some(k) => arg.max_dim(k.try_into().unwrap(), false).0,
                     },
-                    // OperatorType::Abs => {
-                    //     match arg {
-                    //         // abs :: float[*sh] -> float[*sh]
-                    //         BufferData::Float(ref d) => BufferData::Float(FloatBuffer::Materialized(arg.shape(), d.iter().map(|x| x.abs()).collect())),
-                    //         _ => unimplemented!(),
-                    //     }
-                    // },
+                    // abs :: float[*sh] -> float[*sh]
+                    OperatorType::Abs => arg.abs(),
+                    // fract :: float[*sh] -> float[*sh]
+                    OperatorType::Fract => arg.frac(),
                     ref t => unimplemented!("Unary operator '{}' is not implemented", t.to_str()),
                 }
             },
@@ -242,18 +283,10 @@ impl Node {
                 match operator.typee {
                     // * :: (float, float) -> float
                     OperatorType::Multiplication => fd * sd,
-                    // OperatorType::Greater => match (first_buf, second_buf) {
-                    //     // > :: (float, float) -> bool
-                    //     (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(BoolBuffer::Materialized(
-                    //             first_shape,
-                    //             fd
-                    //                 .iter()
-                    //                 .zip(sd.iter()) // TODO: check validity of zip
-                    //                 .map(|(x, y)| x > y)
-                    //                 .collect()
-                    //     )),
-                    //     _ => unimplemented!(),
-                    // },
+                    // / :: (float, float) -> float
+                    OperatorType::Divide => fd / sd,
+                    // > :: (float, float) -> bool
+                    OperatorType::Greater => fd.f_greater_tensor(&sd).unwrap(),
                     // OperatorType::Less => match (first_buf, second_buf) {
                     //     // < :: (float, float) -> bool
                     //     (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(BoolBuffer::Materialized(
@@ -266,25 +299,13 @@ impl Node {
                     //     )),
                     //     _ => unimplemented!(),
                     // },
-                    // OperatorType::Minus => match (first_buf, second_buf) {
-                    //     // - :: (float, float) -> float
-                    //     (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Float(FloatBuffer::Materialized(
-                    //         first_shape,
-                    //         fd
-                    //             .iter()
-                    //             .zip(sd.iter())
-                    //             .map(|(x, y)| x - y)
-                    //             .collect::<Vec<f64>>()
-                    //     )),
-                    //     _ => unimplemented!(),
-                    // },
+                    // - :: (float, float) -> float
+                    OperatorType::Minus => fd - sd,
                     // max :: (float[..], float[..]) -> float[..]
                     OperatorType::Max => fd.maximum(&sd),
                     // + :: (float, float) -> float
                     OperatorType::Plus => fd + sd,
-                    // OperatorType::Stack => {
-                        // stack_along(vec![first_buf, second_buf], operator.dimensions.unwrap_or(0))
-                    // },
+                    OperatorType::Stack => stack_along(&[fd, sd], operator.dimensions.unwrap_or(0)),
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
             },
@@ -318,12 +339,8 @@ impl Node {
                     }
                 }
             },
-            Node::UnaryOperator {operator, argument} => {
-                format!("{} {}", operator.to_str(), argument.to_str())
-            },
-            Node::BinaryOperator {operator, first_argument, second_argument} => {
-                format!("({}) {} {}", first_argument.to_str(), operator.to_str(), second_argument.to_str())
-            },
+            Node::UnaryOperator {operator, argument} => format!("{} {}", operator.to_str(), argument.to_str()),
+            Node::BinaryOperator {operator, first_argument, second_argument} => format!("({}) {} {}", first_argument.to_str(), operator.to_str(), second_argument.to_str()),
         }
     }
 }
@@ -416,10 +433,9 @@ impl<'a> TokenStream {
         let mut unary_ops_stack = Vec::new();
         let first_argument = loop {
             unary_ops_stack.push(
-                match self.parse_operator_or_operand() {
-                    OperatorOrOperand::Operator(op) => {
-                        UnaryOp::UnaryOperator(Operator::from_str(op.as_str()).unwrap())
-                    },
+                {let x = self.parse_operator_or_operand();
+                match x {
+                    OperatorOrOperand::Operator(op) => UnaryOp::UnaryOperator(Operator::from_str(op.as_str()).unwrap()),
                     OperatorOrOperand::Operand(x) => {
                         match self.peek() {
                             Some(binary_operator) if binary_operator == ")" => break x,
@@ -428,7 +444,7 @@ impl<'a> TokenStream {
                         }
                         UnaryOp::BinaryOperator(Operator::from_str(self.next().unwrap().as_str()).unwrap(), x)
                     },
-                }
+                }}
             );
         };
         // self.next(); // TODO: assert ")" here and similar places
@@ -470,7 +486,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|-|<|>|fract|\+|\*)(#\d*(\.5)?)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|-|<|>|fract|\+|\*|/)(#\d*(\.5)?)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
@@ -494,7 +510,8 @@ fn main() {
     let ast = expression.parse::<Node>().unwrap();
     // TODO: check ast correctness
     let res = ast.eval();
-    res.save("test.buf");
+    res.print();
+    //res.save("test.buf");
     // dump_buffer(&res, "test.buf").unwrap();
     // dump_buffer(&res, format!("{}.buf", buf.name)).unwrap();
 }
