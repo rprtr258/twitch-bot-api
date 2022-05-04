@@ -6,12 +6,8 @@ use std::{
 use {
     lazy_static::lazy_static,
     regex::Regex,
-    tensorflow::{
-        Tensor,
-        expr::{Expr, Constant, Placeholder},
-    },
+    tch::Tensor,
 };
-extern crate tensorflow;
 
 // fn lookup_buffer(s: &str) -> Result<Buffer, String> {
 //     // TODO: lookup known/cached buffers first
@@ -32,17 +28,8 @@ extern crate tensorflow;
 
 #[derive(Debug)]
 enum Buffer {
-    Named(Expr<f32>),
-    Literal(Tensor<f32>),
-}
-
-impl Into<Expr<f32>> for Buffer {
-    fn into(self) -> Expr<f32> {
-        match self {
-            Buffer::Named(x) => x,
-            Buffer::Literal(x) => Constant::new_expr(x),
-        }
-    }
+    Named(String),
+    Literal(Tensor),
 }
 
 // impl Buffer {
@@ -54,38 +41,39 @@ impl Into<Expr<f32>> for Buffer {
 //     }
 // }
 
-// // TODO: stack not only along 0, stack along -0.5, 0, 0.5, 1, ..., n-0.5, n, n+0.5
-// fn stack_along(array: Vec<BufferData>, dim: Idx) -> BufferData {
-//     {
-//         if dim > array.len() {
-//             panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
-//         }
-//         let first_item = &array[0];
-//         if !array.iter().skip(1).all(|buf| match (&first_item, &buf) {
-//             (BufferData::Float(_), BufferData::Float(_)) => true,
-//             (BufferData::U8(_), BufferData::U8(_)) => true,
-//             (BufferData::Bool(_), BufferData::Bool(_)) => true,
-//             (BufferData::Idx(_), BufferData::Idx(_)) => true,
-//             _ => false,
-//         } && first_item.shape() == buf.shape()) {
-//             panic!("all items must have the same type and shape");
-//         }
-//     }
-//     let unstacked_shape = array[0].shape();
-//     match array[0] {
-//         BufferData::Float(_) => BufferData::Float(FloatBuffer::Stacked(
-//                 unstacked_shape,
-//                 dim,
-//                 array
-//                     .into_iter()
-//                     .map(|buf| match buf {
-//                         BufferData::Float(float_buf) => Box::new(float_buf),
-//                         _ => unreachable!(),
-//                     })
-//                     .collect()
-//         )),
-//         _ => unimplemented!(),
-//     }
+// TODO: stack along -0.5, 0, 0.5, 1, ..., n-0.5, n, n+0.5
+// fn stack_along(array: &Tensor[], dim: Idx) -> Buffer {
+    // {
+    //     if dim > array.len() {
+    //         panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
+    //     }
+    //     let first_item = &array[0];
+    //     if !array.iter().skip(1).all(|buf| match (&first_item, &buf) {
+    //         (Buffer::Float(_), Buffer::Float(_)) => true,
+    //         (Buffer::U8(_), Buffer::U8(_)) => true,
+    //         (Buffer::Bool(_), Buffer::Bool(_)) => true,
+    //         (Buffer::Idx(_), Buffer::Idx(_)) => true,
+    //         _ => false,
+    //     } && first_item.shape() == buf.shape()) {
+    //         panic!("all items must have the same type and shape");
+    //     }
+    // }
+    // Buffer::Literal(Tensor::stack(&array[..], dim))
+    // let unstacked_shape = array[0].shape();
+    // match array[0] {
+    //     BufferData::Float(_) => BufferData::Float(FloatBuffer::Stacked(
+    //             unstacked_shape,
+    //             dim,
+    //             array
+    //                 .into_iter()
+    //                 .map(|buf| match buf {
+    //                     BufferData::Float(float_buf) => Box::new(float_buf),
+    //                     _ => unreachable!(),
+    //                 })
+    //                 .collect()
+    //     )),
+    //     _ => unimplemented!(),
+    // }
 // }
 
 // fn dump_buffer(buf: &Buffer, filename: &str) -> std::io::Result<()> {
@@ -226,9 +214,12 @@ enum Node {
 }
 
 impl Node {
-    fn eval(self) -> Expr<f32> {
+    fn eval(self) -> Tensor {
         match self {
-            Node::Buffer(buf) => buf.into(),
+            Node::Buffer(buf) => match buf {
+                Buffer::Literal(x) => x,
+                _ => unimplemented!(),
+            },
             Node::UnaryOperator {operator, argument, ..} => {
                 // let arg = argument.eval();
                 // println!("op={} a=[{:?}]{:?}", operator.to_str(), arg.shape(), arg);
@@ -309,29 +300,19 @@ impl Node {
                     //             .iter()
                     //             .zip(sd.iter())
                     //             .map(|(x, y)| x - y)
-                    //             .collect::<Vec<f32>>()
+                    //             .collect::<Vec<f64>>()
                     //     )),
                     //     _ => unimplemented!(),
                     // },
                     // + :: (float, float) -> float
                     OperatorType::Plus => fd + sd,
                     // OperatorType::Stack => {
-                    //     stack_along(vec![first_buf, second_buf], operator.dimensions.unwrap_or(0))
+                        // stack_along(vec![first_buf, second_buf], operator.dimensions.unwrap_or(0))
                     // },
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
             },
         }
-    }
-
-    fn eval_to_tensor(self) -> Tensor<f32> {
-        let mut g = tensorflow::Graph::new();
-        let z_node = tensorflow::expr::Compiler::new(&mut g).compile(self.eval()).unwrap();
-        let session = tensorflow::Session::new(&tensorflow::SessionOptions::new(), &g).unwrap();
-        let mut step = tensorflow::SessionRunArgs::new();
-        let output_token = step.request_fetch(&z_node, 0);
-        session.run(&mut step).unwrap();
-        step.fetch::<f32>(output_token).unwrap()
     }
 
     // TODO: move to Debug implementation
@@ -344,14 +325,15 @@ impl Node {
                 // TODO: ({name}@)?{T}[{shape}]
                 match buf {
                     Buffer::Named(name) => name.to_string(),
-                    Buffer::Literal(data) => if data.shape().dims().unwrap() == 0 {
-                        format!("{}", data[0])
+                    Buffer::Literal(data) => if data.dim() == 0 {
+                        format!("{}", data.double_value(&[]))
                     } else {
                         // TODO: join
+                        let data_len = data.size().into_iter().fold(1, |a, x| a * x);
                         let mut res = "[".to_owned();
-                        for i in 0..data.len() {
-                            res += format!("{}", data[i]).as_str();
-                            if i + 1 < data.len() {
+                        for i in 0..data_len {
+                            res += format!("{}", data.double_value(&[i])).as_str();
+                            if i + 1 < data_len {
                                 res += " ";
                             }
                         }
@@ -392,14 +374,16 @@ impl<'a> TokenStream {
         if token == "[" { // array
             let mut array = Vec::new();
             while self.peek().unwrap() != "]" {
-                array.push(self.parse_buffer());
+                array.push(match self.parse_buffer() {
+                    Buffer::Literal(x) => x,
+                    _ => unimplemented!(),
+                });
             }
             self.next(); // "]"
             if array.len() == 0 {
                 panic!("Buffer cannot be empty");
             }
-            array.pop().unwrap()
-            // stack_along(array, 0)
+            Buffer::Literal(Tensor::stack(&array[..], 0))
         } else { // single item operand
             // TODO: regexes
             // TODO: linear/monadic interface
@@ -416,11 +400,11 @@ impl<'a> TokenStream {
                     .captures_iter(&token.as_str())
                     .next()
                     .map(|capture| capture[1].to_string())
-                    .and_then(|x| x.parse::<f32>().ok())
+                    .and_then(|x| x.parse::<f64>().ok())
                     .unwrap();
-                Buffer::Literal(<Tensor<f32>>::new(&[]).with_values(&[data]).unwrap())
+                Buffer::Literal(Tensor::of_slice(&[data]).reshape(&[]))
             } else {
-                Buffer::Named(<Placeholder<f32>>::new_expr(&[], token.as_str()))
+                Buffer::Named(token)
             }
         }
     }
@@ -541,104 +525,95 @@ fn main() {
 #[cfg(test)]
 mod tests {
     // use std::rc::Rc;
-    use tensorflow::Tensor;
-    use super::{Node/*, Buffer, Operator, OperatorType*/};
+    use tch::Tensor;
+    use super::{Node, Buffer, Operator, OperatorType};
 
-    // #[test]
-    // fn string_to_expression() {
-    //     assert_eq!(
-    //         "(.4 > max#2 abs (x stack#2 y) - [.5 .5]) * 7. * fract x + y"
-    //             .parse::<Node>()
-    //             .unwrap()
-    //             .to_str(),
-    //         "((0.4) > max#2 abs ((x) stack#2 y) - [0.5 0.5]) * (7) * fract (x) + y",
-    //     );
-    // }
+    fn tensor(shape: &[i64], data: &[f64]) -> Tensor {
+        Tensor::of_slice(data).reshape(shape)
+    }
 
-    // #[test]
-    // fn string_to_expression_simple() {
-    //     assert_eq!(
-    //         "(.4 > (x stack#2 y) - [.5 .5])"
-    //             .parse::<Node>()
-    //             .unwrap()
-    //             .to_str(),
-    //         "(0.4) > ((x) stack#2 y) - no_name",
-    //     );
-    // }
+    fn scalar(x: f64) -> Tensor {
+        tensor(&[], &[x])
+    }
 
-    // #[test]
-    // fn expression_to_string() {
-    //     let x_buffer = Rc::new(Buffer::Float(FloatBuffer::Named("x".to_owned())));
-    //     let y_buffer = Rc::new(Buffer::Float(FloatBuffer::Named("y".to_owned())));
-    //     let test_expr = Node::BinaryOperator {
-    //         operator: Operator {typee: OperatorType::Multiplication, dimensions: None},
-    //         first_argument: Box::new(Node::BinaryOperator {
-    //             operator: Operator {typee: OperatorType::Less, dimensions: None},
-    //             first_argument: Box::new(Node::UnaryOperator {
-    //                 operator: Operator {typee: OperatorType::Max, dimensions: Some(2)},
-    //                 argument: Box::new(Node::UnaryOperator {
-    //                     operator: Operator {typee: OperatorType::Abs, dimensions: None},
-    //                     argument: Box::new(Node::BinaryOperator {
-    //                         operator: Operator {typee: OperatorType::Minus, dimensions: None},
-    //                         first_argument: Box::new(Node::BinaryOperator {
-    //                             operator: Operator {typee: OperatorType::Stack, dimensions: Some(2)},
-    //                             first_argument: Box::new(Node::Buffer(x_buffer.clone())),
-    //                             second_argument: Box::new(Node::Buffer(y_buffer.clone())),
-    //                         }),
-    //                         second_argument: Box::new(Node::Buffer(Rc::new(Buffer::Float(FloatBuffer::Materialized(vec![2], vec![0.5, 0.5]))))),
-    //                     }),
-    //                 }),
-    //             }),
-    //             second_argument: Box::new(Node::Buffer(Rc::new(Buffer::Float(FloatBuffer::Materialized(vec![], vec![0.4]))))),
-    //         }),
-    //         second_argument: Box::new(Node::UnaryOperator {
-    //             operator: Operator {typee: OperatorType::Fract, dimensions: None},
-    //             argument: Box::new(Node::BinaryOperator {
-    //                 operator: Operator {typee: OperatorType::Multiplication, dimensions: None},
-    //                 first_argument: Box::new(Node::BinaryOperator {
-    //                     operator: Operator {typee: OperatorType::Plus, dimensions: None},
-    //                     first_argument: Box::new(Node::Buffer(x_buffer.clone())),
-    //                     second_argument: Box::new(Node::Buffer(y_buffer.clone())),
-    //                 }),
-    //                 second_argument: Box::new(Node::Buffer(Rc::new(Buffer::Float(FloatBuffer::Materialized(vec![], vec![7.]))))),
-    //             }),
-    //         }),
-    //     };
-    //     assert_eq!(
-    //         test_expr.to_str(),
-    //         "((max#2 abs ((x) stack#2 y) - [0.5 0.5]) < 0.4) * fract ((x) + y) * 7".to_owned(),
-    //     );
-    // }
-
-    // // TODO: fix to Idx-s
-    // #[test]
-    // fn adamar_product() {
-    //     assert_eq!(
-    //         "([[1. 2.][3. 4.]] * [[1. 2.][3. 4.]])".parse::<Node>().unwrap().eval(),
-    //         Buffer::Float(FloatBuffer::Materialized(
-    //             vec![2, 2],
-    //             vec![1., 4., 9., 16.],
-    //         )),
-    //     );
-    // }
-
-    // #[test]
-    // fn test_eval_4() {
-    //     assert_eq!(
-    //         "2.*2.".parse::<Node>().unwrap().eval(),
-    //         Buffer::Float(FloatBuffer::Materialized(
-    //             vec![],
-    //             vec![4.],
-    //         )),
-    //     );
-    // }
-
-    fn scalar(x: f32) -> Tensor<f32> {
-        Tensor::new(&[]).with_values(&[x]).unwrap()
+    fn parse_expr(expr: &str) -> Node {
+        expr.parse().unwrap()
     }
             
-    fn eval_expr(expr: &str) -> Tensor<f32> {
-        expr.parse::<Node>().unwrap().eval_to_tensor()
+    fn eval_expr(expr: &str) -> Tensor {
+        parse_expr(expr).eval()
+    }
+
+    #[test]
+    fn string_to_expression() {
+        assert_eq!(
+            parse_expr("(.4 > max#2 abs (x stack#2 y) - [.5 .5]) * 7. * fract x + y").to_str(),
+            "((0.4) > max#2 abs ((x) stack#2 y) - [0.5 0.5]) * (7) * fract (x) + y",
+        );
+    }
+
+    #[test]
+    fn string_to_expression_simple() {
+        assert_eq!(
+            parse_expr("(.4 > (x stack#2 y) - [.5 .5])").to_str(),
+            "(0.4) > ((x) stack#2 y) - [0.5 0.5]",
+        );
+    }
+
+    #[test]
+    fn expression_to_string() {
+        let test_expr = Node::BinaryOperator {
+            operator: Operator {typee: OperatorType::Multiplication, dimensions: None},
+            first_argument: Box::new(Node::BinaryOperator {
+                operator: Operator {typee: OperatorType::Less, dimensions: None},
+                first_argument: Box::new(Node::UnaryOperator {
+                    operator: Operator {typee: OperatorType::Max, dimensions: Some(2)},
+                    argument: Box::new(Node::UnaryOperator {
+                        operator: Operator {typee: OperatorType::Abs, dimensions: None},
+                        argument: Box::new(Node::BinaryOperator {
+                            operator: Operator {typee: OperatorType::Minus, dimensions: None},
+                            first_argument: Box::new(Node::BinaryOperator {
+                                operator: Operator {typee: OperatorType::Stack, dimensions: Some(2)},
+                                first_argument: Box::new(Node::Buffer(Buffer::Named("x".to_owned()))),
+                                second_argument: Box::new(Node::Buffer(Buffer::Named("y".to_owned()))),
+                            }),
+                            second_argument: Box::new(Node::Buffer(Buffer::Literal(tensor(&[2], &[0.5, 0.5])))),
+                        }),
+                    }),
+                }),
+                second_argument: Box::new(Node::Buffer(Buffer::Literal(scalar(0.4f64)))),
+            }),
+            second_argument: Box::new(Node::UnaryOperator {
+                operator: Operator {typee: OperatorType::Fract, dimensions: None},
+                argument: Box::new(Node::BinaryOperator {
+                    operator: Operator {typee: OperatorType::Multiplication, dimensions: None},
+                    first_argument: Box::new(Node::BinaryOperator {
+                        operator: Operator {typee: OperatorType::Plus, dimensions: None},
+                        first_argument: Box::new(Node::Buffer(Buffer::Named("x".to_owned()))),
+                        second_argument: Box::new(Node::Buffer(Buffer::Named("y".to_owned()))),
+                    }),
+                    second_argument: Box::new(Node::Buffer(Buffer::Literal(scalar(7.)))),
+                }),
+            }),
+        };
+        assert_eq!(
+            test_expr.to_str(),
+            "((max#2 abs ((x) stack#2 y) - [0.5 0.5]) < 0.4) * fract ((x) + y) * 7".to_owned(),
+        );
+    }
+
+    // // TODO: fix to Idx-s
+    #[test]
+    fn adamar_product() {
+        assert_eq!(
+            eval_expr("([[1. 2.][3. 4.]]*[[1. 2.][3. 4.]])"),
+            tensor(&[2, 2], &[1., 4., 9., 16.]),
+        );
+    }
+
+    #[test]
+    fn test_eval_4() {
+        assert_eq!(eval_expr("2.*2."), scalar(4.));
     }
 
     #[test]
