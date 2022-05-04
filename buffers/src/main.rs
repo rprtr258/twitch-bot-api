@@ -2,7 +2,6 @@ use std::{
     env::args,
     // io::Write,
     process::exit,
-    rc::Rc,
 };
 use {
     lazy_static::lazy_static,
@@ -223,19 +222,16 @@ enum Node {
         first_argument: Box<Node>,
         second_argument: Box<Node>,
     },
-    Buffer(Rc<Buffer>),
+    Buffer(Buffer),
 }
 
 impl Node {
-    fn eval(&self) -> Tensor<f32> {
+    fn eval(self) -> Expr<f32> {
         match self {
-            Node::Buffer(buf) => match &**buf {
-                Buffer::Literal(x) => x.clone(),
-                _ => unimplemented!(),
-            },
+            Node::Buffer(buf) => buf.into(),
             Node::UnaryOperator {operator, argument, ..} => {
-                let arg = argument.eval();
-                println!("op={} a=[{:?}]{:?}", operator.to_str(), arg.shape(), arg);
+                // let arg = argument.eval();
+                // println!("op={} a=[{:?}]{:?}", operator.to_str(), arg.shape(), arg);
                 // TODO: implement abs
                 // TODO: implement fract
                 // TODO: implement max#2
@@ -274,21 +270,13 @@ impl Node {
                 }
             },
             Node::BinaryOperator {operator, first_argument, second_argument, ..} => {
-                let fd = Constant::new_expr(first_argument.eval());
-                let sd = Constant::new_expr(second_argument.eval());
+                let fd = first_argument.eval();
+                let sd = second_argument.eval();
                 // println!("op={} f=[{:?}]{:?} s=[{:?}]{:?}", operator.to_str(), fd.shape(), fd, sd, sd);
                 // let first_shape = first_buf.shape();
                 match operator.typee {
                     // * :: (float, float) -> float
-                    OperatorType::Multiplication => {
-                        let mut g = tensorflow::Graph::new();
-                        let z_node = tensorflow::expr::Compiler::new(&mut g).compile(fd * sd).unwrap();
-                        let session = tensorflow::Session::new(&tensorflow::SessionOptions::new(), &g).unwrap();
-                        let mut step = tensorflow::SessionRunArgs::new();
-                        let output_token = step.request_fetch(&z_node, 0);
-                        session.run(&mut step).unwrap();
-                        step.fetch::<f32>(output_token).unwrap()
-                    },
+                    OperatorType::Multiplication => fd * sd,
                     // OperatorType::Greater => match (first_buf, second_buf) {
                     //     // > :: (float, float) -> bool
                     //     (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(BoolBuffer::Materialized(
@@ -326,17 +314,7 @@ impl Node {
                     //     _ => unimplemented!(),
                     // },
                     // + :: (float, float) -> float
-                    OperatorType::Plus => {
-                        let mut g = tensorflow::Graph::new();
-                        let z_node = tensorflow::expr::Compiler::new(&mut g)
-                            .compile(fd + sd)
-                            .unwrap();
-                        let session = tensorflow::Session::new(&tensorflow::SessionOptions::new(), &g).unwrap();
-                        let mut step = tensorflow::SessionRunArgs::new();
-                        let output_token = step.request_fetch(&z_node, 0);
-                        session.run(&mut step).unwrap();
-                        step.fetch::<f32>(output_token).unwrap()
-                    },
+                    OperatorType::Plus => fd + sd,
                     // OperatorType::Stack => {
                     //     stack_along(vec![first_buf, second_buf], operator.dimensions.unwrap_or(0))
                     // },
@@ -344,6 +322,16 @@ impl Node {
                 }
             },
         }
+    }
+
+    fn eval_to_tensor(self) -> Tensor<f32> {
+        let mut g = tensorflow::Graph::new();
+        let z_node = tensorflow::expr::Compiler::new(&mut g).compile(self.eval()).unwrap();
+        let session = tensorflow::Session::new(&tensorflow::SessionOptions::new(), &g).unwrap();
+        let mut step = tensorflow::SessionRunArgs::new();
+        let output_token = step.request_fetch(&z_node, 0);
+        session.run(&mut step).unwrap();
+        step.fetch::<f32>(output_token).unwrap()
     }
 
     // TODO: move to Debug implementation
@@ -354,7 +342,7 @@ impl Node {
                 // shape_str = ",".join(map(str, self.shape))
                 // type_str = self.type.name
                 // TODO: ({name}@)?{T}[{shape}]
-                match &**buf {
+                match buf {
                     Buffer::Named(name) => name.to_string(),
                     Buffer::Literal(data) => if data.shape().dims().unwrap() == 0 {
                         format!("{}", data[0])
@@ -452,7 +440,7 @@ impl<'a> TokenStream {
             }
             res
         } else if token == "[" || !is_operator(token) {
-            OperatorOrOperand::Operand(Node::Buffer(Rc::new(self.parse_buffer())))
+            OperatorOrOperand::Operand(Node::Buffer(self.parse_buffer()))
         } else {
             OperatorOrOperand::Operator(self.next().unwrap())
         }
@@ -648,7 +636,7 @@ mod tests {
     #[test]
     fn test_eval_6() {
         assert_eq!(
-            "2.+2.*2.".parse::<Node>().unwrap().eval(),
+            "2.+2.*2.".parse::<Node>().unwrap().eval_to_tensor(),
             Tensor::new(&[]).with_values(&[6.]).unwrap(),
         );
     }
