@@ -633,22 +633,21 @@ mod tests {
     //     );
     // }
 
-    #[test]
-    fn test_eval_6() {
-        assert_eq!(
-            "2.+2.*2.".parse::<Node>().unwrap().eval_to_tensor(),
-            Tensor::new(&[]).with_values(&[6.]).unwrap(),
-        );
+    fn scalar(x: f32) -> Tensor<f32> {
+        Tensor::new(&[]).with_values(&[x]).unwrap()
+    }
+            
+    fn eval_expr(expr: &str) -> Tensor<f32> {
+        expr.parse::<Node>().unwrap().eval_to_tensor()
     }
 
-    // #[test]
-    // fn test_eval_8() {
-    //     assert_eq!(
-    //         "2.*2.+2.".parse::<Node>().unwrap().eval(),
-    //         Buffer::Float(FloatBuffer::Materialized(
-    //             vec![],
-    //             vec![8.],
-    //         )),
-    //     );
-    // }
+    #[test]
+    fn test_eval_6() {
+        assert_eq!(eval_expr("2.+2.*2."), scalar(6.));
+    }
+
+    #[test]
+    fn test_eval_8() {
+        assert_eq!(eval_expr("2.*2.+2."), scalar(8.));
+    }
 }
