@@ -9,22 +9,14 @@ use {
     tch::Tensor,
 };
 
-// fn lookup_buffer(s: &str) -> Result<Buffer, String> {
-//     // TODO: lookup known/cached buffers first
-//     match s {
-//         "x" => Ok({
-//             let t = tensorflow::Tensor::new(&[3, 3]);
-//             // vec![-1., -1., -1., -1., -1., 0., 0., 0., 0., 0., 1.,1.,1.,1.,1.,];
-//             Buffer::Literal(t)
-//         }),
-//         "y" => Ok({
-//             let t = tensorflow::Tensor::new(&[3, 3]);
-//             // vec![1., 0., -1., 1., 0., -1., 1., 0., -1.],
-//             Buffer::Literal(t)
-//         }),
-//         _ => Err(format!("Buffer '{}' was not found", s))
-//     }
-// }
+fn lookup_buffer(s: &str) -> Result<Tensor, String> {
+    // TODO: lookup known/cached buffers first
+    match s {
+        "x" => Ok(Tensor::of_slice(&[-1., -1., -1., 0., 0., 0., 1., 1., 1.]).reshape(&[3, 3])),
+        "y" => Ok(Tensor::of_slice(&[1., 0., -1., 1., 0., -1., 1., 0., -1.]).reshape(&[3, 3])),
+        _ => Err(format!("Buffer '{}' was not found", s))
+    }
+}
 
 #[derive(Debug)]
 enum Buffer {
@@ -218,38 +210,20 @@ impl Node {
         match self {
             Node::Buffer(buf) => match buf {
                 Buffer::Literal(x) => x,
-                _ => unimplemented!(),
+                Buffer::Named(name) => lookup_buffer(name.as_str()).unwrap(),
             },
             Node::UnaryOperator {operator, argument, ..} => {
-                // let arg = argument.eval();
+                let arg = argument.eval();
                 // println!("op={} a=[{:?}]{:?}", operator.to_str(), arg.shape(), arg);
                 // TODO: implement abs
                 // TODO: implement fract
                 // TODO: implement max#2
                 match operator.typee {
-                    // OperatorType::Max => {
-                    //     match arg {
-                    //         // max#k :: float[a1,..,ak,..,an] -> float[a1,..,~ak,..,an]
-                    //         BufferData::Float(ref d) => {
-                    //             let dim = operator.dimensions.unwrap();
-                    //             let mut new_shape = arg.shape().clone();
-                    //             new_shape.remove(dim);
-                    //             // TODO: not only dim=2
-                    //             let shift = arg.shape()[0] * arg.shape()[1];
-                    //             println!("shift={}", shift);
-                    //             let mut new_data = Vec::with_capacity(d.shape().iter().fold(1, |a, x| a * x) / arg.dim(dim));
-                    //             for j in 0..shift {
-                    //                 let mut res = d.get(j);
-                    //                 for i in 1..arg.dim(dim) {
-                    //                     res = res.max(d.get(j + i * shift));
-                    //                 }
-                    //                 new_data.push(res);
-                    //             }
-                    //             BufferData::Float(FloatBuffer::Materialized(new_shape, new_data))
-                    //         },
-                    //         _ => unimplemented!(),
-                    //     }
-                    // },
+                    // max#k :: float[a1,..,ak,..,an] -> float[a1,..,~ak,..,an]
+                    OperatorType::Max => match operator.dimensions {
+                        None => arg.max(),
+                        Some(k) => arg.max_dim(k.try_into().unwrap(), false).0,
+                    },
                     // OperatorType::Abs => {
                     //     match arg {
                     //         // abs :: float[*sh] -> float[*sh]
@@ -304,6 +278,8 @@ impl Node {
                     //     )),
                     //     _ => unimplemented!(),
                     // },
+                    // max :: (float[..], float[..]) -> float[..]
+                    OperatorType::Max => fd.maximum(&sd),
                     // + :: (float, float) -> float
                     OperatorType::Plus => fd + sd,
                     // OperatorType::Stack => {
@@ -423,10 +399,10 @@ impl<'a> TokenStream {
                 panic!("Expected ')' after end of expression");
             }
             res
-        } else if token == "[" || !is_operator(token) {
-            OperatorOrOperand::Operand(Node::Buffer(self.parse_buffer()))
-        } else {
+        } else if is_operator(token) {
             OperatorOrOperand::Operator(self.next().unwrap())
+        } else {
+            OperatorOrOperand::Operand(Node::Buffer(self.parse_buffer()))
         }
     }
 
@@ -514,10 +490,11 @@ fn main() {
         eprintln!("Usage: {} EXPRESSION", argv[0]);
         exit(1);
     }
-    // let expression = &argv[1];
-    // let ast = expression.parse::<Node>().unwrap();
+    let expression = &argv[1];
+    let ast = expression.parse::<Node>().unwrap();
     // TODO: check ast correctness
-    // let res = ast.eval();
+    let res = ast.eval();
+    res.save("test.buf");
     // dump_buffer(&res, "test.buf").unwrap();
     // dump_buffer(&res, format!("{}.buf", buf.name)).unwrap();
 }
