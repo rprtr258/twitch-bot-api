@@ -116,6 +116,7 @@ enum OperatorType {
     Less,
     Minus,
     Plus,
+    Pow,
     Divide,
     Stack,
     Max,
@@ -135,6 +136,7 @@ impl OperatorType {
             "+"     => Ok(OperatorType::Plus          ),
             "*"     => Ok(OperatorType::Multiplication),
             "/"     => Ok(OperatorType::Divide        ),
+            "**"    => Ok(OperatorType::Pow           ),
             "stack" => Ok(OperatorType::Stack         ),
             "max"   => Ok(OperatorType::Max           ),
             "abs"   => Ok(OperatorType::Abs           ),
@@ -155,7 +157,8 @@ impl OperatorType {
             OperatorType::Minus          => "-"    ,
             OperatorType::Plus           => "+"    ,
             OperatorType::Multiplication => "*"    ,
-            OperatorType::Divide         => "/",
+            OperatorType::Divide         => "/"    ,
+            OperatorType::Pow            => "**"   ,
             OperatorType::Stack          => "stack",
             OperatorType::Max            => "max"  ,
             OperatorType::Abs            => "abs"  ,
@@ -268,6 +271,7 @@ impl Node {
                     OperatorType::Max => fd.maximum(&sd),
                     // + :: (float, float) -> float
                     OperatorType::Plus => fd + sd,
+                    OperatorType::Pow => fd.pow(&sd),
                     OperatorType::Stack => stack_along(&[fd, sd], operator.dimensions.unwrap_or(0)),
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
@@ -456,7 +460,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|zeros|-|<|>|fract|\+|\*|/|sin|cos)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
