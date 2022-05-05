@@ -127,6 +127,8 @@ enum OperatorType {
     Sin,
     Cos,
     Clamp,
+    Smoothstep,
+    Norm,
 }
 
 impl OperatorType {
@@ -148,6 +150,8 @@ impl OperatorType {
             "sin"   => Ok(OperatorType::Sin           ),
             "cos"   => Ok(OperatorType::Cos           ),
             "clamp" => Ok(OperatorType::Clamp         ),
+            "smoothstep" => Ok(OperatorType::Smoothstep),
+            "norm"  => Ok(OperatorType::Norm          ),
             _ => Err(format!("operator '{}' is not implemented", s)),
         }
     }
@@ -172,6 +176,8 @@ impl OperatorType {
             OperatorType::Sin            => "zeros",
             OperatorType::Cos            => "zeros",
             OperatorType::Clamp          => "clamp",
+            OperatorType::Smoothstep     => "smoothstep",
+            OperatorType::Norm           => "norm" ,
         }.to_owned()
     }
 }
@@ -242,6 +248,7 @@ impl Node {
                     },
                     // abs :: float[*sh] -> float[*sh]
                     OperatorType::Abs => arg.abs(),
+                    OperatorType::Minus => -arg,
                     // fract :: float[*sh] -> float[*sh]
                     OperatorType::Fract => arg.frac(),
                     OperatorType::Zeros => if arg.dim() != 1 {
@@ -258,6 +265,18 @@ impl Node {
                     },
                     OperatorType::Sin => arg.sin(),
                     OperatorType::Cos => arg.cos(),
+                    OperatorType::Plus => arg.sum_dim_intlist(
+                        &operator.dimensions
+                            .into_iter()
+                            .map(|k| k as i64)
+                            .collect::<Vec<i64>>()[..],
+                        false,
+                        tch::Kind::Double
+                    ),
+                    OperatorType::Norm => arg.norm_scalaropt_dim(2., &operator.dimensions
+                        .into_iter()
+                        .map(|k| k as i64)
+                        .collect::<Vec<i64>>()[..], false),
                     ref t => unimplemented!("Unary operator '{}' is not implemented", t.to_str()),
                 }
             },
@@ -289,6 +308,14 @@ impl Node {
                         let a = fd.double_value(&[0]);
                         let b = fd.double_value(&[1]);
                         sd.clamp(a, b)
+                    },
+                    OperatorType::Smoothstep => if fd.dim() != 1 || fd.size()[0] != 2 {
+                        panic!("can't eval clamp of tensor with shape {:?}", fd.size());
+                    } else {
+                        let a = fd.double_value(&[0]);
+                        let b = fd.double_value(&[1]);
+                        let t = ((sd-a)/(b-a)).clamp(0., 1.);
+                        t.multiply(&t.multiply_scalar(2.).g_sub_scalar(3.).multiply_scalar(-1.)) * t
                     },
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
@@ -394,7 +421,9 @@ impl<'a> TokenStream {
             token == "abs" ||
             token.starts_with("max") ||
             token.starts_with("min") ||
+            token.starts_with("+") ||
             token.starts_with("stack") ||
+            token.starts_with("norm") ||
             token == "sin" ||
             token == "cos"
         }
@@ -478,7 +507,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|clamp)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|norm|smoothstep|clamp)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
@@ -643,4 +672,9 @@ mod tests {
     fn test_eval_8() {
         assert_eq!(eval_expr("2.*2.+2."), scalar(8.));
     }
+    // TODO: check why ast-s are not same:
+    //     "256.*fract10.*(+#2((abs((x stack#2y)-.5)*2.)-.3)**2.)**.5"
+    //     "256.*fract10.*(+#2((abs(0.-.5+x stack#2y)*2.)-.3)**2.)**.5"
+    // TODO: 3( and 4), no error:
+    //     "256.*fract10.*norm#2(abs((x stack#2y)-.5)*2.))-.3"
 }
