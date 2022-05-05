@@ -130,6 +130,7 @@ enum OperatorType {
     Clamp,
     Smoothstep,
     Norm,
+    Slice,
 }
 
 impl OperatorType {
@@ -154,6 +155,7 @@ impl OperatorType {
             "clamp" => Ok(OperatorType::Clamp         ),
             "smoothstep" => Ok(OperatorType::Smoothstep),
             "norm"  => Ok(OperatorType::Norm          ),
+            "slice" => Ok(OperatorType::Slice         ),
             _ => Err(format!("operator '{}' is not implemented", s)),
         }
     }
@@ -181,6 +183,7 @@ impl OperatorType {
             OperatorType::Clamp          => "clamp",
             OperatorType::Smoothstep     => "smoothstep",
             OperatorType::Norm           => "norm" ,
+            OperatorType::Slice          => "slice" ,
         }.to_owned()
     }
 }
@@ -325,6 +328,13 @@ impl Node {
                         t.multiply(&t.multiply_scalar(2.).g_sub_scalar(3.).multiply_scalar(-1.)) * t
                     },
                     OperatorType::Atan2 => fd.atan2(&sd),
+                    OperatorType::Slice => if fd.dim() != 1 || fd.size()[0] != 2 {
+                        panic!("can't eval clamp of tensor with shape {:?}", fd.size());
+                    } else {
+                        let start = fd.double_value(&[0]) as i64;
+                        let end = fd.double_value(&[1]) as i64;
+                        sd.slice(operator.dimensions.map(|x| x as i64).unwrap_or(0), Some(start), Some(end), 1)
+                    },
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
             },
@@ -515,7 +525,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|atan2|norm|smoothstep|clamp)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|atan2|norm|smoothstep|clamp|slice)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
