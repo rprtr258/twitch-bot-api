@@ -233,12 +233,12 @@ impl Node {
                         let b = fd.double_value(&[1]);
                         sd.clamp(a, b)
                     },
-                    OperatorType::Smoothstep => if fd.dim() != 1 || fd.size()[0] != 2 {
-                        panic!("can't eval clamp of tensor with shape {:?}", fd.size());
-                    } else {
-                        let a = fd.double_value(&[0]);
-                        let b = fd.double_value(&[1]);
-                        let t = ((sd-a)/(b-a)).clamp(0., 1.);
+                    OperatorType::Smoothstep if fd.dim() >= 1 && fd.size()[0] == 2 => {
+                        let a = fd.slice(0, Some(0), Some(1), 1).flatten(0, 1);
+                        let b = fd.slice(0, Some(1), Some(2), 1).flatten(0, 1);
+                        let b_minus_a = b.g_sub(&a);
+                        let x_minus_a = sd.g_sub(&a);
+                        let t = x_minus_a.divide(&b_minus_a).clamp(0., 1.);
                         t.multiply(&t.multiply_scalar(2.).g_sub_scalar(3.).multiply_scalar(-1.)) * t
                     },
                     OperatorType::Atan2 => fd.atan2(&sd),
@@ -259,7 +259,7 @@ impl Node {
                         let dim1 = fd.double_value(&[1]) as i64;
                         sd.transpose(dim0, dim1)
                     },
-                    ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
+                    _ => unimplemented!("Binary operator {:?}{:?}#{:?}{:?} is not implemented", fd.size(), operator.typee, operator.dimensions, sd.size()),
                 }
             },
         }
@@ -336,7 +336,7 @@ impl<'a> TokenStream {
             // TODO: compile regex compile-time
             // TODO: assure every character of string is parsed
             lazy_static! {
-                static ref RE_FLOAT: Regex = Regex::new(r#"(\d+\.\d*|\d*\.\d+)"#).unwrap();
+                static ref RE_FLOAT: Regex = Regex::new(r#"(\d+\.?\d*|\d*\.\d+)"#).unwrap();
                 static ref RE_U8: Regex = Regex::new(r#"0x([0-9A-F]{2})"#).unwrap();
                 static ref RE_IDX: Regex = Regex::new(r#"(\d{,4})"#).unwrap();
                 static ref RE_BOOL: Regex = Regex::new(r#"(true|false)"#).unwrap();
