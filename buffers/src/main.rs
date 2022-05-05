@@ -130,6 +130,7 @@ enum OperatorType {
     Max,
     Abs,
     Fract,
+    Zeros,
 }
 
 impl OperatorType {
@@ -145,6 +146,7 @@ impl OperatorType {
             "max"   => Ok(OperatorType::Max           ),
             "abs"   => Ok(OperatorType::Abs           ),
             "fract" => Ok(OperatorType::Fract         ),
+            "zeros" => Ok(OperatorType::Zeros         ),
             _ => Err(format!("operator '{}' is not implemented", s)),
         }
     }
@@ -163,6 +165,7 @@ impl OperatorType {
             OperatorType::Max            => "max"  ,
             OperatorType::Abs            => "abs"  ,
             OperatorType::Fract          => "fract",
+            OperatorType::Zeros          => "zeros",
         }.to_owned()
     }
 }
@@ -231,6 +234,13 @@ impl Node {
                     OperatorType::Abs => arg.abs(),
                     // fract :: float[*sh] -> float[*sh]
                     OperatorType::Fract => arg.frac(),
+                    OperatorType::Zeros => {
+                        if arg.dim() != 1 {
+                            panic!("can't eval zeros of tensor with shape {:?}", arg.size());
+                        }
+                        let shape = arg.iter::<f64>().unwrap().map(|x| x as i64).collect::<Vec<i64>>();
+                        Tensor::zeros(&shape[..], (tch::Kind::Double, tch::Device::Cpu))
+                    },
                     ref t => unimplemented!("Unary operator '{}' is not implemented", t.to_str()),
                 }
             },
@@ -342,7 +352,7 @@ impl<'a> TokenStream {
             // TODO: compile regex compile-time
             // TODO: assure every character of string is parsed
             lazy_static! {
-                static ref RE_FLOAT: Regex = Regex::new(r#"(\d*\.\d*)"#).unwrap();
+                static ref RE_FLOAT: Regex = Regex::new(r#"(\d+\.\d*|\d*\.\d+)"#).unwrap();
                 static ref RE_U8: Regex = Regex::new(r#"0x([0-9A-F]{2})"#).unwrap();
                 static ref RE_IDX: Regex = Regex::new(r#"(\d{,4})"#).unwrap();
                 static ref RE_BOOL: Regex = Regex::new(r#"(true|false)"#).unwrap();
@@ -363,7 +373,7 @@ impl<'a> TokenStream {
 
     fn parse_operator_or_operand(&mut self) -> OperatorOrOperand {
         fn is_operator(token: &str) -> bool {
-            token == "fract" || token == "-" || token == "abs" || token.starts_with("max") || token.starts_with("stack")
+            token == "fract" || token == "-" || token == "zeros" || token == "abs" || token.starts_with("max") || token.starts_with("stack")
         }
         let token = self.peek().unwrap();
         if token == "(" {
@@ -445,7 +455,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|-|<|>|fract|\+|\*|/)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|zeros|-|<|>|fract|\+|\*|/)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
@@ -465,15 +475,26 @@ fn array_to_image(arr: Tensor) {
     let mut encoder = png_pong::Encoder::new(&mut out_data).into_step_enc();
     // TODO: wtf is step and delay, remove
     let step = png_pong::Step{
-        raster: png_pong::PngRaster::Gray8(pix::Raster::with_u8_buffer(shape[1] as u32, shape[0] as u32, arr
-            .flip(&[0])
-            .ravel()
-            .iter::<f64>()
-            .unwrap()
-            .map(|x| x as u8)
-            .collect::<Vec<u8>>()
-        )),
-        delay: 0
+        raster: match arr.dim() {
+            2 => png_pong::PngRaster::Gray8(pix::Raster::with_u8_buffer(shape[1] as u32, shape[0] as u32, arr
+                .flip(&[0])
+                .ravel()
+                .iter::<f64>()
+                .unwrap()
+                .map(|x| x as u8)
+                .collect::<Vec<u8>>()
+            )),
+            3 if shape[2] == 3 => png_pong::PngRaster::Rgb8(pix::Raster::with_u8_buffer(shape[1] as u32, shape[0] as u32, arr
+                .flip(&[0])
+                .ravel()
+                .iter::<f64>()
+                .unwrap()
+                .map(|x| x as u8)
+                .collect::<Vec<u8>>()
+            )),
+            _ => unimplemented!(),
+        },
+        delay: 0,
     };
     encoder.encode(&step).expect("Failed to add frame");
     std::fs::write("out.png", out_data).expect("Failed to save image");
