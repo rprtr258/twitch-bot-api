@@ -489,7 +489,6 @@ fn main() {
     let ast = expression.parse::<Node>().unwrap();
     // TODO: check ast correctness
     let res = ast.eval();
-    //res.print();
     //println!("res shape: {:?}", res.size());
     array_to_image(res);
     //res.save("test.buf");
