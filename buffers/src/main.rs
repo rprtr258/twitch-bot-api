@@ -126,6 +126,7 @@ enum OperatorType {
     Zeros,
     Sin,
     Cos,
+    Atan2,
     Clamp,
     Smoothstep,
     Norm,
@@ -149,6 +150,7 @@ impl OperatorType {
             "zeros" => Ok(OperatorType::Zeros         ),
             "sin"   => Ok(OperatorType::Sin           ),
             "cos"   => Ok(OperatorType::Cos           ),
+            "atan2" => Ok(OperatorType::Atan2         ),
             "clamp" => Ok(OperatorType::Clamp         ),
             "smoothstep" => Ok(OperatorType::Smoothstep),
             "norm"  => Ok(OperatorType::Norm          ),
@@ -173,8 +175,9 @@ impl OperatorType {
             OperatorType::Abs            => "abs"  ,
             OperatorType::Fract          => "fract",
             OperatorType::Zeros          => "zeros",
-            OperatorType::Sin            => "zeros",
-            OperatorType::Cos            => "zeros",
+            OperatorType::Sin            => "sin"  ,
+            OperatorType::Cos            => "cos"  ,
+            OperatorType::Atan2          => "atan2",
             OperatorType::Clamp          => "clamp",
             OperatorType::Smoothstep     => "smoothstep",
             OperatorType::Norm           => "norm" ,
@@ -273,10 +276,14 @@ impl Node {
                         false,
                         tch::Kind::Double
                     ),
-                    OperatorType::Norm => arg.norm_scalaropt_dim(2., &operator.dimensions
-                        .into_iter()
-                        .map(|k| k as i64)
-                        .collect::<Vec<i64>>()[..], false),
+                    OperatorType::Norm => arg.norm_scalaropt_dim(
+                        2.,
+                        &operator.dimensions
+                            .into_iter()
+                            .map(|k| k as i64)
+                            .collect::<Vec<i64>>()[..],
+                        false
+                    ),
                     ref t => unimplemented!("Unary operator '{}' is not implemented", t.to_str()),
                 }
             },
@@ -317,6 +324,7 @@ impl Node {
                         let t = ((sd-a)/(b-a)).clamp(0., 1.);
                         t.multiply(&t.multiply_scalar(2.).g_sub_scalar(3.).multiply_scalar(-1.)) * t
                     },
+                    OperatorType::Atan2 => fd.atan2(&sd),
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
             },
@@ -507,7 +515,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|norm|smoothstep|clamp)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|atan2|norm|smoothstep|clamp)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
