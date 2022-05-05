@@ -259,19 +259,9 @@ impl Node {
                     // / :: (float, float) -> float
                     OperatorType::Divide => fd / sd,
                     // > :: (float, float) -> bool
-                    OperatorType::Greater => fd.f_greater_tensor(&sd).unwrap(),
-                    // OperatorType::Less => match (first_buf, second_buf) {
-                    //     // < :: (float, float) -> bool
-                    //     (BufferData::Float(fd), BufferData::Float(sd)) => BufferData::Bool(BoolBuffer::Materialized(
-                    //             fd.shape(),
-                    //             fd
-                    //                 .iter()
-                    //                 .zip(sd.iter()) // TODO: check validity of zip
-                    //                 .map(|(x, y)| x < y)
-                    //                 .collect()
-                    //     )),
-                    //     _ => unimplemented!(),
-                    // },
+                    OperatorType::Greater => fd.greater_tensor(&sd),
+                    // < :: (float, float) -> bool
+                    OperatorType::Less => fd.less_tensor(&sd),
                     // - :: (float, float) -> float
                     OperatorType::Minus => fd - sd,
                     // max :: (float[..], float[..]) -> float[..]
