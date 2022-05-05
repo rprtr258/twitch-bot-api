@@ -15,18 +15,9 @@ enum Buffer {
     Literal(Tensor),
 }
 
-// impl Buffer {
-//     fn shape(&self) -> tensorflow::Shape {
-//         match self {
-//             Buffer::Named(_) => unimplemented!(),
-//             Buffer::Literal(x) => x.shape(),
-//         }
-//     }
-// }
-
 fn lookup_buffer(s: &str) -> Result<Tensor, String> {
     // TODO: lookup known/cached buffers first
-    const N: i64 = 1000;
+    const N: i64 = 400;
     let i = Tensor::arange(N, (tch::Kind::Double, tch::Device::Cpu)) / N as f64;
     let x = Tensor::repeat(&i, &[N]).reshape(&[N, N]);
     match s {
@@ -131,6 +122,8 @@ enum OperatorType {
     Abs,
     Fract,
     Zeros,
+    Sin,
+    Cos,
 }
 
 impl OperatorType {
@@ -147,6 +140,8 @@ impl OperatorType {
             "abs"   => Ok(OperatorType::Abs           ),
             "fract" => Ok(OperatorType::Fract         ),
             "zeros" => Ok(OperatorType::Zeros         ),
+            "sin"   => Ok(OperatorType::Sin           ),
+            "cos"   => Ok(OperatorType::Cos           ),
             _ => Err(format!("operator '{}' is not implemented", s)),
         }
     }
@@ -166,6 +161,8 @@ impl OperatorType {
             OperatorType::Abs            => "abs"  ,
             OperatorType::Fract          => "fract",
             OperatorType::Zeros          => "zeros",
+            OperatorType::Sin            => "zeros",
+            OperatorType::Cos            => "zeros",
         }.to_owned()
     }
 }
@@ -234,13 +231,20 @@ impl Node {
                     OperatorType::Abs => arg.abs(),
                     // fract :: float[*sh] -> float[*sh]
                     OperatorType::Fract => arg.frac(),
-                    OperatorType::Zeros => {
-                        if arg.dim() != 1 {
-                            panic!("can't eval zeros of tensor with shape {:?}", arg.size());
-                        }
-                        let shape = arg.iter::<f64>().unwrap().map(|x| x as i64).collect::<Vec<i64>>();
-                        Tensor::zeros(&shape[..], (tch::Kind::Double, tch::Device::Cpu))
+                    OperatorType::Zeros => if arg.dim() != 1 {
+                        panic!("can't eval zeros of tensor with shape {:?}", arg.size());
+                    } else {
+                        Tensor::zeros(
+                            &arg
+                                .iter::<f64>()
+                                .unwrap()
+                                .map(|x| x as i64)
+                                .collect::<Vec<i64>>()[..],
+                            (tch::Kind::Double, tch::Device::Cpu)
+                        )
                     },
+                    OperatorType::Sin => arg.sin(),
+                    OperatorType::Cos => arg.cos(),
                     ref t => unimplemented!("Unary operator '{}' is not implemented", t.to_str()),
                 }
             },
@@ -372,8 +376,15 @@ impl<'a> TokenStream {
     }
 
     fn parse_operator_or_operand(&mut self) -> OperatorOrOperand {
-        fn is_operator(token: &str) -> bool {
-            token == "fract" || token == "-" || token == "zeros" || token == "abs" || token.starts_with("max") || token.starts_with("stack")
+        fn is_unary_operator(token: &str) -> bool {
+            token == "fract" ||
+            token == "-" ||
+            token == "zeros" ||
+            token == "abs" ||
+            token.starts_with("max") ||
+            token.starts_with("stack") ||
+            token == "sin" ||
+            token == "cos"
         }
         let token = self.peek().unwrap();
         if token == "(" {
@@ -385,7 +396,7 @@ impl<'a> TokenStream {
                 panic!("Expected ')' after end of expression");
             }
             res
-        } else if is_operator(token) {
+        } else if is_unary_operator(token) {
             OperatorOrOperand::Operator(self.next().unwrap())
         } else {
             OperatorOrOperand::Operand(Node::Buffer(self.parse_buffer()))
@@ -455,7 +466,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|zeros|-|<|>|fract|\+|\*|/)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|zeros|-|<|>|fract|\+|\*|/|sin|cos)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
