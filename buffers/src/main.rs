@@ -15,98 +15,6 @@ enum Buffer {
     Literal(Tensor),
 }
 
-fn lookup_buffer(s: &str) -> Result<Tensor, String> {
-    // TODO: lookup known/cached buffers first
-    const N: i64 = 400;
-    let i = Tensor::arange(N, (tch::Kind::Double, tch::Device::Cpu)) / N as f64;
-    let x = Tensor::repeat(&i, &[N]).reshape(&[N, N]);
-    match s {
-        "x" => Ok(x),
-        "y" => Ok(x.transpose(0, 1)),
-        _ => Err(format!("Buffer '{}' was not found", s))
-    }
-}
-
-// TODO: stack along -0.5, 0, 0.5, 1, ..., n-0.5, n, n+0.5
-fn stack_along(array: &[Tensor], dim: usize) -> Tensor {
-    // {
-    //     if dim > array.len() {
-    //         panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
-    //     }
-    //     let first_item = &array[0];
-    //     if !array.iter().skip(1).all(|buf| match (&first_item, &buf) {
-    //         (Buffer::Float(_), Buffer::Float(_)) => true,
-    //         (Buffer::U8(_), Buffer::U8(_)) => true,
-    //         (Buffer::Bool(_), Buffer::Bool(_)) => true,
-    //         (Buffer::Idx(_), Buffer::Idx(_)) => true,
-    //         _ => false,
-    //     } && first_item.shape() == buf.shape()) {
-    //         panic!("all items must have the same type and shape");
-    //     }
-    // }
-    Tensor::stack(&array[..], dim.try_into().unwrap())
-    // let unstacked_shape = array[0].shape();
-    // match array[0] {
-    //     BufferData::Float(_) => BufferData::Float(FloatBuffer::Stacked(
-    //             unstacked_shape,
-    //             dim,
-    //             array
-    //                 .into_iter()
-    //                 .map(|buf| match buf {
-    //                     BufferData::Float(float_buf) => Box::new(float_buf),
-    //                     _ => unreachable!(),
-    //                 })
-    //                 .collect()
-    //     )),
-    //     _ => unimplemented!(),
-    // }
-}
-
-// fn dump_buffer(buf: &Buffer, filename: &str) -> std::io::Result<()> {
-//     // TODO: reset file content
-//     let mut file = std::fs::File::options()
-//         .create(true)
-//         .write(true)
-//         .open(filename)?;
-//     // type
-//     file.write(match buf {
-//         Buffer::Float(_) => &[0x00],
-//         Buffer::U8(_) => &[0x01],
-//         Buffer::Bool(_) => &[0x02],
-//         Buffer::Idx(_) => &[0x03],
-//     })?;
-//     // shape length
-//     file.write(&[buf.rank().try_into().unwrap()])?;
-//     // shape
-//     file.write(&buf.shape().iter().map(|x| (*x).try_into().unwrap()).collect::<Vec<u8>>().as_slice())?;
-//     // data
-//     println!("{:?}", buf);
-//     file.write(&match &buf {
-//         Buffer::Float(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
-//         _ => unimplemented!(),
-//         // BufferData::U8(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
-//         // BufferData::Bool(data) => data.iter().map(|x| if *x {0x01u8} else {0x00u8}).collect::<Vec<u8>>(),
-//         // BufferData::Idx(data) => data.iter().map(|x| x % 0xFFFF).flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
-//     }.as_slice())?;
-//     Ok(())
-// }
-
-//fn load_buffer(filename: &str) -> std::io::Result<Buffer> {
-//    let mut file = std::fs::File::open(filename)?;
-//    //let mut buf = Vec::with_capacity(file.size());
-//    //file.read(&buf);
-//    //let shape_len = buf[1];
-//    //let shape = buf
-//    //let data = match buf[0] {
-//    //    0x00 => BufferData::Float(),
-//    //}
-//    //Ok(Buffer {
-//    //    shape,
-//    //    data,
-//    //})
-//    unimplemented!()
-//}
-
 type OperatorDimensions = Option<usize>;
 
 #[derive(Debug)]
@@ -131,6 +39,8 @@ enum OperatorType {
     Smoothstep,
     Norm,
     Slice,
+    Flatten,
+    Transpose,
 }
 
 impl OperatorType {
@@ -156,6 +66,8 @@ impl OperatorType {
             "smoothstep" => Ok(OperatorType::Smoothstep),
             "norm"  => Ok(OperatorType::Norm          ),
             "slice" => Ok(OperatorType::Slice         ),
+            "flatten" => Ok(OperatorType::Flatten     ),
+            "transpose" => Ok(OperatorType::Transpose ),
             _ => Err(format!("operator '{}' is not implemented", s)),
         }
     }
@@ -184,6 +96,8 @@ impl OperatorType {
             OperatorType::Smoothstep     => "smoothstep",
             OperatorType::Norm           => "norm" ,
             OperatorType::Slice          => "slice" ,
+            OperatorType::Flatten        => "flatten",
+            OperatorType::Transpose      => "tranpose",
         }.to_owned()
     }
 }
@@ -328,12 +242,22 @@ impl Node {
                         t.multiply(&t.multiply_scalar(2.).g_sub_scalar(3.).multiply_scalar(-1.)) * t
                     },
                     OperatorType::Atan2 => fd.atan2(&sd),
-                    OperatorType::Slice => if fd.dim() != 1 || fd.size()[0] != 2 {
-                        panic!("can't eval clamp of tensor with shape {:?}", fd.size());
-                    } else {
+                    OperatorType::Slice if fd.dim() == 1 && fd.size()[0] == 2 => {
+                    //     panic!("can't eval clamp of tensor with shape {:?}", fd.size());
+                    // } else {
                         let start = fd.double_value(&[0]) as i64;
                         let end = fd.double_value(&[1]) as i64;
                         sd.slice(operator.dimensions.map(|x| x as i64).unwrap_or(0), Some(start), Some(end), 1)
+                    },
+                    OperatorType::Flatten if fd.dim() == 1 && fd.size()[0] == 2 => {
+                        let start = fd.double_value(&[0]) as i64;
+                        let end = fd.double_value(&[1]) as i64;
+                        sd.flatten(start, end)
+                    },
+                    OperatorType::Transpose if fd.dim() == 1 && fd.size()[0] == 2 => {
+                        let dim0 = fd.double_value(&[0]) as i64;
+                        let dim1 = fd.double_value(&[1]) as i64;
+                        sd.transpose(dim0, dim1)
                     },
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
@@ -525,7 +449,9 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|atan2|norm|smoothstep|clamp|slice)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(
+                r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|atan2|norm|smoothstep|clamp|slice|flatten|transpose)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#
+            ).unwrap();
         }
         Ok(RE
             .captures_iter(s)
@@ -538,6 +464,98 @@ impl std::str::FromStr for Node {
         // TODO: check stream ended
     }
 }
+
+fn lookup_buffer(s: &str) -> Result<Tensor, String> {
+    // TODO: lookup known/cached buffers first
+    const N: i64 = 400;
+    let i = Tensor::arange(N, (tch::Kind::Double, tch::Device::Cpu)) / N as f64;
+    let x = Tensor::repeat(&i, &[N]).reshape(&[N, N]);
+    match s {
+        "x" => Ok(x),
+        "y" => Ok(x.transpose(0, 1)),
+        _ => Err(format!("Buffer '{}' was not found", s))
+    }
+}
+
+// TODO: stack along -0.5, 0, 0.5, 1, ..., n-0.5, n, n+0.5
+fn stack_along(array: &[Tensor], dim: usize) -> Tensor {
+    // {
+    //     if dim > array.len() {
+    //         panic!("stack dim must be >=0 and <=len(array), but it's {} when len(array)={}", dim, array.len());
+    //     }
+    //     let first_item = &array[0];
+    //     if !array.iter().skip(1).all(|buf| match (&first_item, &buf) {
+    //         (Buffer::Float(_), Buffer::Float(_)) => true,
+    //         (Buffer::U8(_), Buffer::U8(_)) => true,
+    //         (Buffer::Bool(_), Buffer::Bool(_)) => true,
+    //         (Buffer::Idx(_), Buffer::Idx(_)) => true,
+    //         _ => false,
+    //     } && first_item.shape() == buf.shape()) {
+    //         panic!("all items must have the same type and shape");
+    //     }
+    // }
+    Tensor::stack(&array[..], dim.try_into().unwrap())
+    // let unstacked_shape = array[0].shape();
+    // match array[0] {
+    //     BufferData::Float(_) => BufferData::Float(FloatBuffer::Stacked(
+    //             unstacked_shape,
+    //             dim,
+    //             array
+    //                 .into_iter()
+    //                 .map(|buf| match buf {
+    //                     BufferData::Float(float_buf) => Box::new(float_buf),
+    //                     _ => unreachable!(),
+    //                 })
+    //                 .collect()
+    //     )),
+    //     _ => unimplemented!(),
+    // }
+}
+
+// fn dump_buffer(buf: &Buffer, filename: &str) -> std::io::Result<()> {
+//     // TODO: reset file content
+//     let mut file = std::fs::File::options()
+//         .create(true)
+//         .write(true)
+//         .open(filename)?;
+//     // type
+//     file.write(match buf {
+//         Buffer::Float(_) => &[0x00],
+//         Buffer::U8(_) => &[0x01],
+//         Buffer::Bool(_) => &[0x02],
+//         Buffer::Idx(_) => &[0x03],
+//     })?;
+//     // shape length
+//     file.write(&[buf.rank().try_into().unwrap()])?;
+//     // shape
+//     file.write(&buf.shape().iter().map(|x| (*x).try_into().unwrap()).collect::<Vec<u8>>().as_slice())?;
+//     // data
+//     println!("{:?}", buf);
+//     file.write(&match &buf {
+//         Buffer::Float(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
+//         _ => unimplemented!(),
+//         // BufferData::U8(data) => data.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
+//         // BufferData::Bool(data) => data.iter().map(|x| if *x {0x01u8} else {0x00u8}).collect::<Vec<u8>>(),
+//         // BufferData::Idx(data) => data.iter().map(|x| x % 0xFFFF).flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>(),
+//     }.as_slice())?;
+//     Ok(())
+// }
+
+//fn load_buffer(filename: &str) -> std::io::Result<Buffer> {
+//    let mut file = std::fs::File::open(filename)?;
+//    //let mut buf = Vec::with_capacity(file.size());
+//    //file.read(&buf);
+//    //let shape_len = buf[1];
+//    //let shape = buf
+//    //let data = match buf[0] {
+//    //    0x00 => BufferData::Float(),
+//    //}
+//    //Ok(Buffer {
+//    //    shape,
+//    //    data,
+//    //})
+//    unimplemented!()
+//}
 
 fn array_to_image(arr: Tensor) {
     let shape = arr.size();
@@ -562,7 +580,7 @@ fn array_to_image(arr: Tensor) {
                 .map(|x| x as u8)
                 .collect::<Vec<u8>>()
             )),
-            _ => unimplemented!(),
+            _ => panic!("Can't save tensor with shape {:?} as image", arr.size()),
         },
         delay: 0,
     };
