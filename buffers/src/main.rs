@@ -120,11 +120,13 @@ enum OperatorType {
     Divide,
     Stack,
     Max,
+    Min,
     Abs,
     Fract,
     Zeros,
     Sin,
     Cos,
+    Clamp,
 }
 
 impl OperatorType {
@@ -139,11 +141,13 @@ impl OperatorType {
             "**"    => Ok(OperatorType::Pow           ),
             "stack" => Ok(OperatorType::Stack         ),
             "max"   => Ok(OperatorType::Max           ),
+            "min"   => Ok(OperatorType::Min           ),
             "abs"   => Ok(OperatorType::Abs           ),
             "fract" => Ok(OperatorType::Fract         ),
             "zeros" => Ok(OperatorType::Zeros         ),
             "sin"   => Ok(OperatorType::Sin           ),
             "cos"   => Ok(OperatorType::Cos           ),
+            "clamp" => Ok(OperatorType::Clamp         ),
             _ => Err(format!("operator '{}' is not implemented", s)),
         }
     }
@@ -161,11 +165,13 @@ impl OperatorType {
             OperatorType::Pow            => "**"   ,
             OperatorType::Stack          => "stack",
             OperatorType::Max            => "max"  ,
+            OperatorType::Min            => "min"  ,
             OperatorType::Abs            => "abs"  ,
             OperatorType::Fract          => "fract",
             OperatorType::Zeros          => "zeros",
             OperatorType::Sin            => "zeros",
             OperatorType::Cos            => "zeros",
+            OperatorType::Clamp          => "clamp",
         }.to_owned()
     }
 }
@@ -230,6 +236,10 @@ impl Node {
                         None => arg.max(),
                         Some(k) => arg.max_dim(k.try_into().unwrap(), false).0,
                     },
+                    OperatorType::Min => match operator.dimensions {
+                        None => arg.max(),
+                        Some(k) => arg.min_dim(k.try_into().unwrap(), false).0,
+                    },
                     // abs :: float[*sh] -> float[*sh]
                     OperatorType::Abs => arg.abs(),
                     // fract :: float[*sh] -> float[*sh]
@@ -273,6 +283,13 @@ impl Node {
                     OperatorType::Plus => fd + sd,
                     OperatorType::Pow => fd.pow(&sd),
                     OperatorType::Stack => stack_along(&[fd, sd], operator.dimensions.unwrap_or(0)),
+                    OperatorType::Clamp => if fd.dim() != 1 || fd.size()[0] != 2 {
+                        panic!("can't eval clamp of tensor with shape {:?}", fd.size());
+                    } else {
+                        let a = fd.double_value(&[0]);
+                        let b = fd.double_value(&[1]);
+                        sd.clamp(a, b)
+                    },
                     ref t => unimplemented!("Binary operator {} is not implemented", t.to_str()),
                 }
             },
@@ -376,6 +393,7 @@ impl<'a> TokenStream {
             token == "zeros" ||
             token == "abs" ||
             token.starts_with("max") ||
+            token.starts_with("min") ||
             token.starts_with("stack") ||
             token == "sin" ||
             token == "cos"
@@ -460,7 +478,7 @@ impl std::str::FromStr for Node {
         // TODO: compile regex compile-time
         // TODO: assure every character of string is parsed
         lazy_static! {
-            static ref RE: Regex = Regex::new(r#"\s*((max|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
+            static ref RE: Regex = Regex::new(r#"\s*((max|min|stack|abs|zeros|-|<|>|fract|\+|\*\*|\*|/|sin|cos|clamp)(#\d*(\.5)?)?|\d+(\.\d*)?|[a-zA-Z0-9.]+|[()\[\]])\s*"#).unwrap();
         }
         Ok(RE
             .captures_iter(s)
