@@ -26,12 +26,12 @@ enum Buffer {
 
 fn lookup_buffer(s: &str) -> Result<Tensor, String> {
     // TODO: lookup known/cached buffers first
-    let N = 1000;
+    const N: i64 = 1000;
     let i = Tensor::arange(N, (tch::Kind::Double, tch::Device::Cpu)) / N as f64;
-    let y = Tensor::repeat(&i, &[N]).reshape(&[N, N]);
+    let x = Tensor::repeat(&i, &[N]).reshape(&[N, N]);
     match s {
-        "x" => Ok(y.transpose(0, 1)),
-        "y" => Ok(y),
+        "x" => Ok(x),
+        "y" => Ok(x.transpose(0, 1)),
         _ => Err(format!("Buffer '{}' was not found", s))
     }
 }
@@ -462,22 +462,20 @@ impl std::str::FromStr for Node {
 fn array_to_image(arr: Tensor) {
     let shape = arr.size();
     let mut out_data = Vec::new();
-    let mut encoder = png_pong::Encoder::new(&mut out_data).into_chunk_enc();
-    encoder.encode(&mut png_pong::chunk::Chunk::ImageHeader(png_pong::chunk::ImageHeader {
-        width: shape[0] as u32,
-        height: shape[1] as u32,
-        color_type: png_pong::chunk::ColorType::Grey,
-        bit_depth: 8,
-        interlace: false,
-    })).unwrap();
-    encoder.encode(&mut png_pong::chunk::Chunk::ImageData(png_pong::chunk::ImageData {data: arr
-        .flatten(0, arr.size().len() as i64 - 1)
-        .iter::<f64>()
-        .unwrap()
-        .map(|x| x as u8)
-        .collect::<Vec<u8>>()
-    })).unwrap();
-    encoder.encode(&mut png_pong::chunk::Chunk::ImageEnd(png_pong::chunk::ImageEnd)).unwrap();
+    let mut encoder = png_pong::Encoder::new(&mut out_data).into_step_enc();
+    // TODO: wtf is step and delay, remove
+    let step = png_pong::Step{
+        raster: png_pong::PngRaster::Gray8(pix::Raster::with_u8_buffer(shape[1] as u32, shape[0] as u32, arr
+            .flip(&[0])
+            .ravel()
+            .iter::<f64>()
+            .unwrap()
+            .map(|x| x as u8)
+            .collect::<Vec<u8>>()
+        )),
+        delay: 0
+    };
+    encoder.encode(&step).expect("Failed to add frame");
     std::fs::write("out.png", out_data).expect("Failed to save image");
 }
 
