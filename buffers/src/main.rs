@@ -459,20 +459,26 @@ impl std::str::FromStr for Node {
     }
 }
 
-use image::RgbImage;
-
-fn array_to_image(arr: Tensor) -> RgbImage {
+fn array_to_image(arr: Tensor) {
     let shape = arr.size();
-    let height = shape[0];
-    let width = shape[1];
-    let raw = arr.flatten(0, (arr.size().len()-1).try_into().unwrap())
+    let mut out_data = Vec::new();
+    let mut encoder = png_pong::Encoder::new(&mut out_data).into_chunk_enc();
+    encoder.encode(&mut png_pong::chunk::Chunk::ImageHeader(png_pong::chunk::ImageHeader {
+        width: shape[0] as u32,
+        height: shape[1] as u32,
+        color_type: png_pong::chunk::ColorType::Grey,
+        bit_depth: 8,
+        interlace: false,
+    })).unwrap();
+    encoder.encode(&mut png_pong::chunk::Chunk::ImageData(png_pong::chunk::ImageData {data: arr
+        .flatten(0, arr.size().len() as i64 - 1)
         .iter::<f64>()
         .unwrap()
         .map(|x| x as u8)
-        .flat_map(|x| vec![x, x, x].into_iter())
-        .collect::<Vec<u8>>();
-    RgbImage::from_raw(width as u32, height as u32, raw).unwrap()
-    //.expect("container should have the right size for the image dimensions")
+        .collect::<Vec<u8>>()
+    })).unwrap();
+    encoder.encode(&mut png_pong::chunk::Chunk::ImageEnd(png_pong::chunk::ImageEnd)).unwrap();
+    std::fs::write("out.png", out_data).expect("Failed to save image");
 }
 
 fn main() {
@@ -487,7 +493,7 @@ fn main() {
     let res = ast.eval();
     //res.print();
     //println!("res shape: {:?}", res.size());
-    array_to_image(res).save("out.png");
+    array_to_image(res);
     //res.save("test.buf");
     // dump_buffer(&res, "test.buf").unwrap();
     // dump_buffer(&res, format!("{}.buf", buf.name)).unwrap();
