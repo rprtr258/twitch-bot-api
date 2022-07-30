@@ -43,7 +43,7 @@ run: # Launch bot
 
 .PHONY: send
 send: # Send message from bot
-	python3 src/cmd.py $(MSG)
+	python3 src/cmd.py
 
 .PHONY: init
 init: # Checkout submodules, init database and build balaboba binary
